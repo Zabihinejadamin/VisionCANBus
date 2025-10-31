@@ -1,0 +1,207 @@
+VERSION ""
+
+NS_ :
+    NS_DESC_
+    CM_
+    BA_DEF_
+    BA_
+    VAL_
+    CAT_DEF_
+    CAT_
+    FILTER
+    BA_DEF_DEF_
+    EV_DATA_
+    ENVVAR_DATA_
+    SGTYPE_
+    SGTYPE_VAL_
+    BA_DEF_SGTYPE_
+    BA_SGTYPE_
+    SIG_TYPE_REF_
+    VAL_TABLE_
+    SIG_GROUP_
+    SIG_VALTYPE_
+    SIGTYPE_VALTYPE_
+    BO_TX_BU_
+    BA_DEF_REL_
+    BA_REL_
+    BA_DEF_DEF_REL_
+    BU_SG_REL_
+    BU_EV_REL_
+    BU_BO_REL_
+    SG_MUL_VAL_
+
+BS_:
+BU_: VCU PDU CCU PCU ZCU BMS
+
+BO_ 512 COMMAND_FRAME_BMS: 8 VCU
+  SG_ VCU_STATE_REQUEST : 5|3@1+ (1,0) [0|7] "" BMS
+
+BO_ 1415 VCU_PDU_COMMAND_FRAME: 8 VCU
+  SG_ VCU_PDU_ENABLE : 0|1@0+ (1,0) [0|1] "" PDU
+  SG_ VCU_PDU_B1_CMD : 8|1@0+ (1,0) [0|1] "" PDU
+  SG_ VCU_PDU_B2_CMD : 16|1@0+ (1,0) [0|1] "" PDU
+  SG_ VCU_PDU_B3_CMD : 24|1@0+ (1,0) [0|1] "" PDU
+  SG_ VCU_PDU_MOT_CMD : 32|1@0+ (1,0) [0|1] "" PDU
+
+BO_ 1831 VCU_PCU_COMMAND_FRAME: 8 VCU
+  SG_ VCU_PCU_DERATING_MODE : 0|1@1+ (1,0) [0|1] "" PCU
+  SG_ VCU_PCU_MAINTENANCE_MODE : 1|1@1+ (1,0) [0|1] "" PCU
+  SG_ VCU_PCU_MODE_ECO_SPORT : 2|1@1+ (1,0) [0|1] "" PCU
+  SG_ VCU_PCU_BOOST_MODE : 3|1@1+ (1,0) [0|1] "" PCU
+  SG_ VCU_PCU_BIST_mode : 4|1@1+ (1,0) [0|1] "" PCU
+  SG_ VCU_PCU_BRAKE : 5|1@1+ (1,0) [0|1] "" PCU
+  SG_ VCU_PCU_MODE_START_STOP : 6|1@1+ (1,0) [0|1] "" PCU
+  SG_ VCU_PCU_FORCED_MODE : 7|1@1+ (1,0) [0|1] "" PCU
+  SG_ VCU_PCU_CTRL_FORCEDPUMP : 8|4@1+ (1,0) [0|15] "" PCU
+  SG_ VCU_PCU_TRIM_DOWN_COMMAND : 12|1@1+ (1,0) [0|1] "" PCU
+  SG_ VCU_PCU_TRIM_UP_COMMAND : 13|1@1+ (1,0) [0|1] "" PCU
+  SG_ VCU_PCU_CTRL_JAKETRIM_SEL : 14|1@1+ (1,0) [0|1] "" PCU
+  SG_ VCU_PCU_LED : 15|1@1+ (1,0) [0|1] "" PCU
+  SG_ VCU_PCU_THROTTLE : 16|8@1+ (1,0) [0|100] "%" PCU
+  SG_ VCU_PCU_WATER_DETECTED : 24|1@1+ (1,0) [0|1] "" PCU
+  SG_ VCU_PCU_DRIVE_SELECT : 25|4@1+ (1,0) [0|15] "" PCU
+  SG_ VCU_R : 29|1@1+ (1,0) [0|1] "" PCU
+  SG_ VCU_N : 30|1@1+ (1,0) [0|1] "" PCU
+  SG_ VCU_D : 31|1@1+ (1,0) [0|1] "" PCU
+  SG_ VCU_PCU_KEY : 32|1@1+ (1,0) [0|1] "" PCU
+  SG_ VCU_PCU_DRIVE_CHARGE_STATE : 33|1@1+ (1,0) [0|1] "" PCU
+  SG_ VCU_PCU_DRIVE_CHARGE_15 : 34|1@1+ (1,0) [0|1] "" PCU
+  SG_ VCU_PCU_HVIL : 35|1@1+ (1,0) [0|1] "" PCU
+  SG_ VCU_PCU_UV_LIMIT : 36|12@1+ (0.1,0) [0|409.5] "V" PCU
+  SG_ VCU_PCU_MAXCUR_LIMIT : 48|16@1+ (1,0) [0|65535] "A" PCU
+
+BO_ 1856 HMI_VCU_STATUS: 8 VCU
+  SG_ HMI_VCU_GPS_SPEED : 0|16@1+ (0.02302,0) [0|100] "MPH" Vector__XXX
+  SG_ HMI_VCU_RANGE : 16|8@1+ (1,0) [0|300] "NM" Vector__XXX
+  SG_ HMI_VCU_POWER_CONSUMP : 24|8@1+ (0.1,0) [-500|500] "kW" Vector__XXX
+  SG_ HMI_VCU_SOC : 32|8@1+ (1,0) [0|100] "%" Vector__XXX
+  SG_ HMI_VCU_THROTTLE : 40|8@1+ (1,0) [0|100] "%" Vector__XXX
+  SG_ HMI_VCU_12V_BAT : 48|8@1+ (0.1,0) [0|15] "VDC" Vector__XXX
+  SG_ VCU_BEEP_DIAG_NOT_IN_NEUTRAL : 56|1@1+ (1,0) [0|1] "" Vector__XXX
+  SG_ VCU_BEEP_DIAG_HV_NOT_READY : 57|1@1+ (1,0) [0|1] "" Vector__XXX
+  SG_ VCU_BEEP_DIAG_PDU_ESTOP : 58|1@1+ (1,0) [0|1] "" Vector__XXX
+  SG_ VCU_BEEP_DIAG_12V_UNDERVOLTAGE : 59|1@1+ (1,0) [0|1] "" Vector__XXX
+  SG_ VCU_BEEP_DIAG_PDU_HVIL_OPEN : 60|1@1+ (1,0) [0|1] "" Vector__XXX
+  SG_ VCU_BEEP_DIAG_KILL_SWITCH : 61|1@1+ (1,0) [0|1] "" Vector__XXX
+
+BO_ 1408 PDU_RELAY_STATUS: 8 PDU
+  SG_ PDU_PRECHG_CMD : 44|1@1+ (1,0) [0|1] "" VCU
+  SG_ PDU_MSG_COUNTER : 56|8@1+ (1,0) [0|255] "" VCU
+  SG_ PDU_B1_NEG_CMD : 0|1@1+ (1,0) [0|1] "" VCU
+  SG_ PDU_B1_NEG_STATUS : 3|1@1+ (1,0) [0|1] "" VCU
+  SG_ PDU_B2_NEG_CMD : 8|1@1+ (1,0) [0|1] "" VCU
+  SG_ PDU_B2_NEG_STATUS : 11|1@1+ (1,0) [0|1] "" VCU
+  SG_ PDU_B3_NEG_CMD : 16|1@1+ (1,0) [0|1] "" VCU
+  SG_ PDU_B3_NEG_STATUS : 19|1@1+ (1,0) [0|1] "" VCU
+  SG_ PDU_MOT_NEG_CMD : 24|1@1+ (1,0) [0|1] "" VCU
+  SG_ PDU_MOT_NEG_STATUS : 27|1@1+ (1,0) [0|1] "" VCU
+  SG_ PDU_B1_POS_CMD : 4|1@1+ (1,0) [0|1] "" VCU
+  SG_ PDU_B1_POS_STATUS : 7|1@1+ (1,0) [0|1] "" VCU
+  SG_ PDU_B2_POS_CMD : 12|1@1+ (1,0) [0|1] "" VCU
+  SG_ PDU_B2_POS_STATUS : 15|1@1+ (1,0) [0|1] "" VCU
+  SG_ PDU_B3_POS_CMD : 20|1@1+ (1,0) [0|1] "" VCU
+  SG_ PDU_B3_POS_STATUS : 23|1@1+ (1,0) [0|1] "" VCU
+  SG_ PDU_MOT_POS_CMD : 28|1@1+ (1,0) [0|1] "" VCU
+  SG_ PDU_MOT_POS_STATUS : 31|1@1+ (1,0) [0|1] "" VCU
+
+BO_ 1824 PCU_MOTOR_FRAME: 8 PCU
+  SG_ PCU_MOTOR_HOURS : 0|16@1+ (1,0) [0|10000] "h" VCU
+  SG_ PCU_MOTOR_TORQUE : 16|16@1- (0.1,0) [-30000|30000] "Nm" VCU
+  SG_ PCU_MOTOR_SPEED : 32|16@1+ (1,0) [0|30000] "RPM" VCU
+  SG_ PCU_DRIVE_SEL : 48|4@1+ (1,0) [0|15] "" VCU
+  SG_ PCU_JAKE_STATE : 52|1@1+ (1,0) [0|1] "" VCU
+  SG_ PCU_BOOST_STATE : 53|1@1+ (1,0) [0|1] "" VCU
+  SG_ PCU_TRIM_STATE : 54|1@1+ (1,0) [0|1] "" VCU
+  SG_ PCU_IGN_STATE : 55|1@1+ (1,0) [0|1] "" VCU
+  SG_ PCU_FAILURE_MOT : 56|1@1+ (1,0) [0|1] "" VCU
+  SG_ PCU_FAILURE_INVERTER : 57|1@1+ (1,0) [0|1] "" VCU
+  SG_ PCU_FAILURE_POWER : 58|1@1+ (1,0) [0|1] "" VCU
+  SG_ PCU_FAILURE_INTERNAL : 59|1@1+ (1,0) [0|1] "" VCU
+  SG_ PCU_FAILURE_COOLING : 60|1@1+ (1,0) [0|1] "" VCU
+  SG_ PCU_FAILURE_CANBUS : 61|1@1+ (1,0) [0|1] "" VCU
+  SG_ PCU_FAILURE_FLASH : 62|1@1+ (1,0) [0|1] "" VCU
+  SG_ PCU_FAILURE_TEMP : 63|1@1+ (1,0) [0|1] "" VCU
+
+BO_ 1826 PCU_COOLING_FRAME: 8 PCU
+  SG_ PCU_COOL_IN : 0|8@1+ (1,-40) [-40|215] "Celcius" VCU
+  SG_ PCU_COOL_OUT : 8|8@1+ (1,-40) [-40|215] "Celcius" VCU
+  SG_ PCU_WATERFLOW : 16|8@1+ (0.1,0) [0|25.5] "LPM" VCU
+  SG_ PCU_CPU_TEMP : 24|8@1+ (1,-40) [-40|215] "Celcius" VCU
+  SG_ PCU_STATOR_TEMP : 32|8@1+ (1,-40) [-40|215] "Celcius" VCU
+  SG_ PCU_INVERTER_TEMP : 40|8@1+ (1,-40) [-40|215] "Celcius" VCU
+  SG_ PCU_ZCU_PUMP_TEMP : 48|8@1+ (1,-40) [-40|215] "Celcius" VCU
+  SG_ PCU_ROTOR_TEMP : 56|8@1+ (1,-40) [-40|215] "Celcius" VCU
+
+BO_ 1828 PCU_POWER_FRAME: 8 PCU
+  SG_ PCU_MODE_DERATING : 0|1@1+ (1,0) [0|1] "" VCU
+  SG_ PCU_MODE_MAINTENANCE : 1|1@1+ (1,0) [0|1] "" VCU
+  SG_ PCU_MODE_ECO_SPORT : 2|1@1+ (1,0) [0|1] "" VCU
+  SG_ PCU_MODE_BOOST : 3|1@1+ (1,0) [0|1] "" VCU
+  SG_ PCU_MODE_CRITICAL : 4|1@1+ (1,0) [0|1] "" VCU
+  SG_ PCU_DETECT_INVERTER : 5|1@1+ (1,0) [0|1] "" VCU
+  SG_ PCU_DETECT_HV : 6|1@1+ (1,0) [0|1] "" VCU
+  SG_ PCU_DETECT_START : 7|1@1+ (1,0) [0|1] "" VCU
+  SG_ PCU_12V_BAT : 8|8@1+ (0.1,0) [0|25.5] "V" VCU
+  SG_ PCU_PUMP_PWM : 16|8@1+ (1,0) [0|100] "%" VCU
+  SG_ PCU_TRIM_POSITION : 24|8@1+ (1,0) [0|100] "%" VCU
+  SG_ PCU_INVERTER_VOLTAGE : 32|16@1+ (0.1,0) [0|1000] "V" VCU
+  SG_ PCU_INVERTER_CURRENT : 48|16@1+ (0.1,0) [-500|500] "A" VCU
+
+BO_ 1536 CCU_STATUS_FRAME: 8 CCU
+  SG_ CCU_COOL_IN : 0|8@1+ (1,-40) [-40|215] "Celcius" VCU
+  SG_ CCU_COOL_OUT : 8|8@1+ (1,-40) [-40|215] "Celcius" VCU
+  SG_ CCU_GLYCOL_FLOW : 16|8@1+ (0.1,0) [0|25.5] "L/min" VCU
+  SG_ CCU_GLYCOL_THROTTLE : 24|8@1+ (1,0) [0|100] "%" VCU
+  SG_ CCU_12V_BAT : 32|8@1+ (1,0) [0|100] "%" VCU
+  SG_ CCU_ZCU_CURRENT : 40|8@1- (0.2,0) [0|1] "A" VCU
+  SG_ CCU_ZCU_TEMP : 48|8@1- (1,-40) [-40|215] "Celcius" VCU
+  SG_ CCU_ERROR_CODES : 56|8@1- (1,0) [0|255] "" VCU
+
+BO_ 256 ZCU_PUMP_FRAME: 8 ZCU
+  SG_ ZCU_CURRENT : 0|8@1+ (5,0) [0|50.8] "A" VCU
+  SG_ ZCU_MOSFET_TEMP : 16|8@1+ (1,-40) [-40|215] "Celcius" VCU
+  SG_ ZCU_INPUT_VOLTAGE : 24|8@1+ (10,0) [0|25.5] "V" VCU
+  SG_ ZCU_POWER_CONSUMPTION : 32|16@1+ (10,0) [0|6553.5] "W" VCU
+  SG_ ZCU_CAN_TIMEOUTFLAG : 49|1@1+ (1,0) [0|1] "" VCU
+  SG_ ZCU_MODE : 51|2@1+ (1,0) [0|3] "" VCU
+  SG_ ZCU_ERROR_CODES : 56|8@1+ (1,0) [0|255] "" VCU
+
+CM_ SG_ 1856 VCU_BEEP_DIAG_NOT_IN_NEUTRAL "Beeping because not in neutral when attempting HV transition";
+CM_ SG_ 1856 VCU_BEEP_DIAG_HV_NOT_READY "Beeping because HV < 60V or transitioning";
+CM_ SG_ 1856 VCU_BEEP_DIAG_PDU_ESTOP "Beeping because PDU E-stop (contactor mismatch confirmed)";
+CM_ SG_ 1856 VCU_BEEP_DIAG_12V_UNDERVOLTAGE "Beeping because 12V undervoltage heading to shutdown";
+CM_ SG_ 1856 VCU_BEEP_DIAG_PDU_HVIL_OPEN "Beeping because PDU HVIL opened";
+CM_ SG_ 1856 VCU_BEEP_DIAG_KILL_SWITCH "Beeping because kill switch active or TCU timeout";
+
+VAL_ 512 VCU_STATE_REQUEST 0 "No_Request" 1 "Idle" 2 "HV_Active" 3 "Charge" 4 "Fault_Shutdown";
+VAL_ 1415 VCU_PDU_ENABLE 0 "Switching_Off" 1 "Switching_On";
+VAL_ 1415 VCU_PDU_B1_CMD 0 "Open" 1 "Close";
+VAL_ 1415 VCU_PDU_B2_CMD 0 "Open" 1 "Close";
+VAL_ 1415 VCU_PDU_B3_CMD 0 "Open" 1 "Close";
+VAL_ 1415 VCU_PDU_MOT_CMD 0 "Open" 1 "Close";
+VAL_ 1831 VCU_PCU_TRIM_DOWN_COMMAND 0 "Stop" 1 "Down";
+VAL_ 1831 VCU_PCU_TRIM_UP_COMMAND 0 "Stop" 1 "Up";
+VAL_ 1831 VCU_PCU_LED 0 "Off" 1 "On";
+VAL_ 1831 VCU_PCU_DRIVE_SELECT 0 "None" 1 "Dock" 2 "Reverse" 4 "Neutral" 8 "Drive";
+VAL_ 1831 VCU_PCU_KEY 0 "Not_present" 1 "Present";
+VAL_ 1831 VCU_PCU_DRIVE_CHARGE_STATE 0 "Not_present" 1 "Present";
+VAL_ 1831 VCU_PCU_DRIVE_CHARGE_15 0 "Not_present" 1 "Present";
+VAL_ 1831 VCU_PCU_HVIL 0 "Not_present" 1 "Present";
+VAL_ 1408 PDU_PRECHG_CMD 0 "Open" 1 "Close";
+VAL_ 1824 PCU_DRIVE_SEL 0 "None" 1 "Parking" 2 "Reverse" 4 "Neutral" 8 "Drive";
+VAL_ 1824 PCU_JAKE_STATE 0 "Not_present" 1 "Active";
+VAL_ 1824 PCU_BOOST_STATE 0 "Not_present" 1 "Active";
+VAL_ 1824 PCU_TRIM_STATE 0 "Not_present" 1 "Active";
+VAL_ 1824 PCU_IGN_STATE 0 "Not_present" 1 "Active";
+VAL_ 1824 PCU_FAILURE_MOT 0 "Ok" 1 "Failure";
+VAL_ 1824 PCU_FAILURE_INVERTER 0 "Ok" 1 "Failure";
+VAL_ 1824 PCU_FAILURE_POWER 0 "Ok" 1 "Failure";
+VAL_ 1824 PCU_FAILURE_INTERNAL 0 "Ok" 1 "Failure";
+VAL_ 1824 PCU_FAILURE_COOLING 0 "Ok" 1 "Failure";
+VAL_ 1824 PCU_FAILURE_CANBUS 0 "Ok" 1 "Failure";
+VAL_ 1824 PCU_FAILURE_FLASH 0 "Ok" 1 "Failure";
+VAL_ 1824 PCU_FAILURE_TEMP 0 "Ok" 1 "Failure";
+VAL_ 1828 PCU_MODE_ECO_SPORT 0 "Eco" 1 "Sport";
+VAL_ 1536 CCU_ERROR_CODES 0 "No_errors";
+VAL_ 256 ZCU_MODE 1 "Nominal" 2 "Derated" 3 "Critical";
+VAL_ 256 ZCU_ERROR_CODES 0 "No_errors" 175 "CAN_Bus_Timeout" 176 "Critical_Under_Temperature" 251 "Critical_Over_Temperature";

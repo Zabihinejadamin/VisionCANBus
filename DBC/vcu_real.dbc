@@ -1,0 +1,183 @@
+VERSION "1.0"
+
+NS_ :
+    NS_DESC_
+    CM_
+    BA_DEF_
+    BA_
+    VAL_
+    CAT_DEF_
+    CAT_
+    FILTER
+    BA_DEF_DEF_
+    EV_DATA_
+    ENVVAR_DATA_
+    SGTYPE_
+    SGTYPE_VAL_
+    BA_DEF_SGTYPE_
+    BA_SGTYPE_
+    SIG_TYPE_REF_
+    VAL_TABLE_
+    SIG_GROUP_
+    SIG_VALTYPE_
+    SIGTYPE_VALTYPE_
+    BO_TX_BU_
+    BA_DEF_REL_
+    BA_REL_
+    BA_DEF_DEF_REL_
+    BU_SG_REL_
+    BU_EV_REL_
+    BU_BO_REL_
+    SG_MUL_VAL_
+
+BS_:
+
+BU_: VCU PCU DCDC TCU BMS PDU HMI
+
+// ==================================================================
+// VCU OUTPUT FRAMES (FROM EXCEL)
+// ==================================================================
+
+// 1. Control Frame (PCU) → 0x727
+BO_ 1831 VCU_PCU_CONTROL_FRAME: 8 VCU
+  SG_ VCU_PCU_MODE : 0|8@1+ (1,0) [0|255] "" PCU
+  SG_ VCU_PCU_THROTTLE : 16|8@1+ (1,0) [0|100] "%" PCU
+  SG_ VCU_PCU_PRND : 24|8@1+ (1,0) [0|15] "" PCU
+  SG_ VCU_PCU_UV_LIMIT : 32|16@1+ (1,0) [0|1000] "V" PCU
+  SG_ VCU_PCU_MAXCUR_LIMIT : 48|16@1+ (1,0) [0|1000] "A" PCU
+
+// 2. Command Frame (DCDC) → 0x4D7
+BO_ 1247 VCU_DCDC_COMMAND_FRAME: 8 VCU
+  SG_ VCU_DCDC_CMD : 0|8@1+ (1,0) [0|1] "" DCDC
+  SG_ VCU_DCDC_OUTPUT : 8|8@1+ (1,0) [0|2] "" DCDC
+
+// 3. Command Frame (TCU) → 0x407
+BO_ 1031 VCU_TCU_COMMAND_FRAME: 8 VCU
+  SG_ VCU_TCU_THROTTLE_POS : 48|8@1+ (1,0) [-100|100] "%" TCU
+
+// 4. Command Frame (BMS) → 0x20B
+BO_ 523 VCU_BMS_COMMAND_FRAME: 8 VCU
+  SG_ VCU_BMS_CMD : 0|8@1+ (1,0) [0|1] "" BMS
+  SG_ VCU_BMS_STATE_REQUEST : 8|8@1+ (1,0) [0|7] "" BMS
+
+// 5. Command Frame (PDU) → 0x587
+BO_ 1415 VCU_PDU_COMMAND_FRAME: 8 VCU
+  SG_ VCU_PDU_CMD : 0|8@1+ (1,0) [0|1] "" PDU
+  SG_ VCU_PDU_BATTERY : 8|8@1+ (1,0) [0|1] "" PDU
+  SG_ VCU_PDU_MOT1 : 16|8@1+ (1,0) [0|1] "" PDU
+  SG_ VCU_PDU_MOT2 : 24|8@1+ (1,0) [0|1] "" PDU
+  SG_ VCU_PDU_GEN : 32|8@1+ (1,0) [0|1] "" PDU
+  SG_ VCU_PDU_CHG : 40|8@1+ (1,0) [0|1] "" PDU
+
+// ==================================================================
+// VCU → HMI (CAN2) FRAMES
+// ==================================================================
+
+// 6. Temp Frame (HMI) → 0x111
+BO_ 273 VCU_HMI_TEMP_FRAME: 8 VCU
+  SG_ HMI_SCU1 : 0|8@1+ (1,-40) [-40|160] "°C" HMI
+  SG_ HMI_SCU2 : 8|8@1+ (1,-40) [-40|160] "°C" HMI
+  SG_ HMI_SCU3 : 16|8@1+ (1,-40) [-40|160] "°C" HMI
+  SG_ HMI_ROTOR : 24|8@1+ (1,-40) [-40|160] "°C" HMI
+  SG_ HMI_INV : 32|8@1+ (1,-40) [-40|160] "°C" HMI
+  SG_ HMI_MOT : 40|8@1+ (1,-40) [-40|160] "°C" HMI
+  SG_ HMI_DCDC : 48|8@1+ (1,-40) [-40|160] "°C" HMI
+  SG_ HMI_BATT : 56|8@1+ (1,-40) [-40|160] "°C" HMI
+
+// 7. Voltage Frame (HMI) → 0x112
+BO_ 274 VCU_HMI_VOLTAGE_FRAME: 8 VCU
+  SG_ HMI_HV_BATT : 0|16@1+ (0.1,0) [0|1000] "V" HMI
+  SG_ HMI_HV_MOT : 16|16@1+ (0.1,0) [0|1000] "V" HMI
+  SG_ HMI_DCDC : 32|8@1+ (0.1,0) [0|25.5] "V" HMI
+  SG_ HMI_AUX1 : 40|8@1+ (0.1,0) [0|25.5] "V" HMI
+  SG_ HMI_AUX2 : 48|8@1+ (0.1,0) [0|25.5] "V" HMI
+  SG_ HMI_LVBAT : 56|8@1+ (0.1,0) [0|25.5] "V" HMI
+
+// 8. Current Frame (HMI) → 0x113
+BO_ 275 VCU_HMI_CURRENT_FRAME: 8 VCU
+  SG_ HMI_HV_BATT : 0|16@1+ (0.1,-1000) [-1000|1000] "A" HMI
+  SG_ HMI_HV_MOT : 16|16@1+ (0.1,-1000) [-1000|1000] "A" HMI
+  SG_ HMI_DCDC : 32|8@1+ (1,-126) [-126|127] "A" HMI
+  SG_ HMI_AUX1 : 40|8@1+ (1,-126) [-126|127] "A" HMI
+  SG_ HMI_AUX2 : 48|8@1+ (1,-126) [-126|127] "A" HMI
+  SG_ HMI_LVBAT : 56|8@1+ (1,-126) [-126|127] "A" HMI
+
+// 9. Drive Frame (HMI) → 0x114
+BO_ 276 VCU_HMI_DRIVE_FRAME: 8 VCU
+  SG_ HMI_THROTTLE : 0|8@1+ (1,0) [0|100] "%" HMI
+  SG_ HMI_STATUS : 8|8@1+ (1,0) [0|255] "" HMI
+  SG_ HMI_TCU_RND : 16|8@1+ (1,0) [0|255] "" HMI
+  SG_ HMI_PCU_RND : 24|8@1+ (1,0) [0|255] "" HMI
+  SG_ HMI_TRIM : 32|8@1+ (1,0) [0|100] "%" HMI
+  SG_ HMI_RANGE : 40|8@1+ (1,0) [0|255] "NM" HMI
+  SG_ HMI_POWER : 48|8@1+ (2,0) [0|512] "kW" HMI
+  SG_ HMI_SOC : 56|8@1+ (1,0) [0|100] "%" HMI
+
+// 10. SpdTq Frame (HMI) → 0x115
+BO_ 277 VCU_HMI_SPDTQ_FRAME: 8 VCU
+  SG_ HMI_MOTOR_SPEED : 0|16@1+ (1,-30000) [-30000|30000] "RPM" HMI
+  SG_ HMI_MOTOR_TORQUE : 16|16@1+ (0.1,-30000) [-30000|30000] "Nm" HMI
+  SG_ HMI_MOTOR_HOURS : 32|16@1+ (1,0) [0|10000] "h" HMI
+  SG_ HMI_OB_ERROR : 48|8@1+ (1,0) [0|255] "" HMI
+  SG_ HMI_MODE : 56|8@1+ (1,0) [0|255] "" HMI
+
+// 11. Sensor Frame (HMI) → 0x116
+BO_ 278 VCU_HMI_SENSOR_FRAME: 8 VCU
+  SG_ HMI_FLOW1 : 0|8@1+ (0.1,0) [0|25.5] "L/m" HMI
+  SG_ HMI_FLOW2 : 8|8@1+ (0.1,0) [0|25.5] "L/m" HMI
+  SG_ HMI_FLOW3 : 16|8@1+ (0.1,0) [0|25.5] "L/m" HMI
+  SG_ HMI_WATER : 24|8@1+ (1,0) [0|255] "mm" HMI
+  SG_ HMI_AIR1 : 32|8@1+ (1,-40) [-100|100] "°C" HMI
+  SG_ HMI_LEAKAGE : 40|16@1+ (1,0) [0|60000] "kΩ" HMI
+  SG_ HMI_FLAGS : 56|8@1+ (1,0) [0|255] "" HMI
+
+// ==================================================================
+// VALUE TABLES (FROM EXCEL)
+// ==================================================================
+
+VAL_ 1831 VCU_PCU_PRND 
+  1 "Parking" 2 "Reverse" 4 "Neutral" 8 "Drive";
+
+VAL_ 1247 VCU_DCDC_CMD 0 "Off" 1 "On";
+VAL_ 1247 VCU_DCDC_OUTPUT 0 "Off" 1 "On" 2 "Fault";
+
+VAL_ 523 VCU_BMS_CMD 0 "NoCmd" 1 "SwitchCmd";
+VAL_ 523 VCU_BMS_STATE_REQUEST 
+  0 "No_Request" 1 "Idle" 2 "HV_Active" 3 "Charge" 4 "Fault_Shutdown";
+
+VAL_ 1415 VCU_PDU_CMD 0 "NoCmd" 1 "SwitchCmd";
+VAL_ 1415 VCU_PDU_BATTERY 0 "Open" 1 "Close";
+VAL_ 1415 VCU_PDU_MOT1 0 "Open" 1 "Close";
+VAL_ 1415 VCU_PDU_MOT2 0 "Open" 1 "Close";
+VAL_ 1415 VCU_PDU_GEN 0 "Open" 1 "Close";
+VAL_ 1415 VCU_PDU_CHG 0 "Open" 1 "Close";
+
+VAL_ 276 HMI_STATUS 
+  1 "KEY" 2 "CHARGE" 4 "KILL_SWITCH" 8 "HVIL" 16 "DEV_PRES" 32 "CRYPTO" 64 "WATER_PRES" 128 "INPUT";
+
+VAL_ 277 HMI_OB_ERROR 
+  1 "MOTOR_FAIL" 2 "INV_FAIL" 4 "POWER_FAIL" 8 "INTERNAL_FAIL" 
+  16 "COOLING_FAIL" 32 "SENSOR_MISMATCH" 64 "FLASH_FAIL" 128 "TEMP_FAIL";
+
+VAL_ 277 HMI_MODE 
+  1 "LIMITED" 2 "BOOSTER" 4 "ECO_SPORT" 8 "BOOST_EN" 16 "REGEN_EN" 
+  32 "INV_DETECT" 64 "HV_DETECT" 128 "STARTED";
+
+VAL_ 278 HMI_FLAGS 
+  1 "MOT_COOL_ISSUE" 2 "BAT1_COOL_ISSUE" 4 "BAT2_COOL_ISSUE" 8 "BAT3_COOL_ISSUE"
+  16 "WATER_PRESENCE" 32 "BAT1_DERATING" 64 "BAT2_DERATING" 128 "BAT3_DERATING";
+
+// ==================================================================
+// COMMENTS
+// ==================================================================
+CM_ BO_ 1831 "VCU → PCU Control Frame (727h)";
+CM_ BO_ 1247 "VCU → DCDC Command Frame (4D7h)";
+CM_ BO_ 1031 "VCU → TCU Command Frame (407h)";
+CM_ BO_ 523  "VCU → BMS Command Frame (20Bh)";
+CM_ BO_ 1415 "VCU → PDU Command Frame (587h)";
+CM_ BO_ 273  "VCU → HMI Temp Frame (111h)";
+CM_ BO_ 274  "VCU → HMI Voltage Frame (112h)";
+CM_ BO_ 275  "VCU → HMI Current Frame (113h)";
+CM_ BO_ 276  "VCU → HMI Drive Frame (114h)";
+CM_ BO_ 277  "VCU → HMI SpdTq Frame (115h)";
+CM_ BO_ 278  "VCU → HMI Sensor Frame (116h)";
