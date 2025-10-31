@@ -1,49 +1,107 @@
-VERSION "1.0"
+VERSION "1.1"
+
+NS_ :
+    NS_DESC_
+    CM_
+    BA_DEF_
+    BA_
+    VAL_
+    CAT_DEF_
+    CAT_
+    FILTER
+    BA_DEF_DEF_
+    EV_DATA_
+    ENVVAR_DATA_
+    SGTYPE_
+    SGTYPE_VAL_
+    BA_DEF_SGTYPE_
+    BA_SGTYPE_
+    SIG_TYPE_REF_
+    VAL_TABLE_
+    SIG_GROUP_
+    SIG_VALTYPE_
+    SIGTYPE_VALTYPE_
+    BO_TX_BU_
+    BA_DEF_REL_
+    BA_REL_
+    BA_DEF_DEF_REL_
+    BU_SG_REL_
+    BU_EV_REL_
+    BU_BO_REL_
+    SG_MUL_VAL_
 
 BS_:
 
 BU_: VCU PCU BMS PDU
 
+
 // ==================================================================
-// 0x727: VCU → PCU CONTROL FRAME
+// 0x727 : VCU → PCU CONTROL FRAME
 // ==================================================================
 BO_ 1831 VCU_PCU_CONTROL_FRAME: 8 VCU
-  SG_ VCU_PCU_MODE : 0|8@1+ (1,0) [0|255] "" PCU
-  SG_ VCU_PCU_CTRL : 8|8@1+ (1,0) [0|255] "" PCU
-  SG_ VCU_PCU_THROTTLE : 16|8@1+ (1,0) [0|100] "%" PCU
-  SG_ VCU_PCU_PRND : 24|8@1+ (1,0) [0|255] "" PCU
-  SG_ VCU_PCU_VOLTAGE_LIMIT : 32|16@1+ (1,0) [0|1000] "V" PCU
-  SG_ VCU_PCU_CURRENT_LIMIT : 48|16@1+ (1,0) [0|1000] "A" PCU
+ SG_ VCU_PCU_MODE              : 0|8@1+   (1,0) [0|255]  "" PCU
+ SG_ VCU_PCU_CTRL              : 8|8@1+   (1,0) [0|255]  "" PCU
+ SG_ VCU_PCU_THROTTLE          : 16|8@1+  (1,0) [0|100]  "%" PCU
+ SG_ VCU_PCU_PRND              : 24|8@1+  (1,0) [0|255]  "" PCU
+ SG_ VCU_PCU_VOLTAGE_LIMIT     : 32|16@1+ (1,0) [0|1000] "V" PCU
+ SG_ VCU_PCU_CURRENT_LIMIT     : 48|16@1+ (1,0) [0|1000] "A" PCU
 
 VAL_ 1831 VCU_PCU_PRND 1 "Park" 2 "Reverse" 4 "Neutral" 8 "Drive";
 
 
 // ==================================================================
-// 0x20B: VCU → BMS COMMAND FRAME
+// 0x20B : VCU → BMS COMMAND FRAME
 // ==================================================================
 BO_ 523 VCU_BMS_COMMAND_FRAME: 8 VCU
-  SG_ VCU_BMS_CMD : 0|8@1+ (1,0) [0|255] "" BMS
-  SG_ VCU_BMS_STATE_REQUEST : 8|8@1+ (1,0) [0|7] "" BMS
+ SG_ VCU_BMS_CMD            : 0|8@1+  (1,0) [0|255] "" BMS
+ SG_ VCU_BMS_STATE_REQUEST  : 8|8@1+  (1,0) [0|7]   "" BMS
 
 VAL_ 523 VCU_BMS_CMD 0 "NoCmd" 1 "SwitchOn" 2 "SwitchOff";
-VAL_ 523 VCU_BMS_STATE_REQUEST 
-  0 "NoRequest" 1 "Idle" 2 "HV_Active" 3 "Charge" 4 "Fault_Shutdown";
+
+VAL_ 523 VCU_BMS_STATE_REQUEST
+  0 "NoRequest"
+  1 "Idle"
+  2 "HV_Active"
+  3 "Charge"
+  4 "Fault_Shutdown";
 
 
 // ==================================================================
-// 0x587: VCU → PDU RELAY COMMAND FRAME
+// 0x587 : VCU → PDU RELAY COMMAND FRAME
 // ==================================================================
 BO_ 1415 VCU_PDU_COMMAND_FRAME: 8 VCU
-  SG_ VCU_PDU_CMD : 0|8@1+ (1,0) [0|1] "" PDU
-  SG_ VCU_PDU_BATTERY : 8|8@1+ (1,0) [0|1] "" PDU
-  SG_ VCU_PDU_MOT1 : 16|8@1+ (1,0) [0|1] "" PDU
-  SG_ VCU_PDU_MOT2 : 24|8@1+ (1,0) [0|1] "" PDU
-  SG_ VCU_PDU_GEN : 32|8@1+ (1,0) [0|1] "" PDU
-  SG_ VCU_PDU_CHG : 40|8@1+ (1,0) [0|1] "" PDU
+ SG_ VCU_PDU_CMD     : 0|8@1+  (1,0) [0|1] "" PDU
+ SG_ VCU_PDU_BATTERY : 8|8@1+  (1,0) [0|1] "" PDU
+ SG_ VCU_PDU_MOT1    : 16|8@1+ (1,0) [0|1] "" PDU
+ SG_ VCU_PDU_MOT2    : 24|8@1+ (1,0) [0|1] "" PDU
+ SG_ VCU_PDU_GEN     : 32|8@1+ (1,0) [0|1] "" PDU
+ SG_ VCU_PDU_CHG     : 40|8@1+ (1,0) [0|1] "" PDU
 
-VAL_ 1415 VCU_PDU_CMD 0 "NoCmd" 1 "Switch";
-VAL_ 1415 VCU_PDU_BATTERY 0 "Open" 1 "Close";
-VAL_ 1415 VCU_PDU_MOT1 0 "Open" 1 "Close";
-VAL_ 1415 VCU_PDU_MOT2 0 "Open" 1 "Close";
-VAL_ 1415 VCU_PDU_GEN 0 "Open" 1 "Close";
-VAL_ 1415 VCU_PDU_CHG 0 "Open" 1 "Close";
+VAL_ 1415 VCU_PDU_CMD     0 "NoCmd" 1 "Switch";
+VAL_ 1415 VCU_PDU_BATTERY 0 "Open"  1 "Close";
+VAL_ 1415 VCU_PDU_MOT1    0 "Open"  1 "Close";
+VAL_ 1415 VCU_PDU_MOT2    0 "Open"  1 "Close";
+VAL_ 1415 VCU_PDU_GEN     0 "Open"  1 "Close";
+VAL_ 1415 VCU_PDU_CHG     0 "Open"  1 "Close";
+
+
+// ==================================================================
+// ✅ NEW — 0x200 : BMS → VCU STATUS FRAME
+// ==================================================================
+BO_ 512 BMS_STATUS_FRAME: 8 BMS
+ SG_ BMS_VOLTAGE     : 0|16@1+  (0.1,0) [0|9000]  "V" VCU
+ SG_ BMS_CURRENT     : 16|16@1- (0.1,0) [0|9000]  "A" VCU
+ SG_ BMS_MAX_DISCH   : 32|8@1+  (2,0)   [0|510]   "A" VCU
+ SG_ BMS_MAX_CHG     : 40|8@1+  (0.1,0) [0|510]   "A" VCU
+ SG_ BMS_SOC         : 48|8@1+  (1,0)   [0|100]   "%" VCU
+ SG_ BMS_STATE       : 56|8@1+  (1,0)   [0|255]   "" VCU
+
+VAL_ 512 BMS_STATE
+  0 "INIT"
+  1 "SHUTDOWN"
+  2 "CHARGE"
+  3 "READY"
+  4 "SLEEP"
+  5 "OPERATIONAL"
+  6 "ACTIVE"
+  7 "FAILURE";
