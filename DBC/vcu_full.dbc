@@ -49,22 +49,6 @@ BO_ 1831 VCU_PCU_CONTROL_FRAME: 8 VCU
 VAL_ 1831 VCU_PCU_PRND 1 "Park" 2 "Reverse" 4 "Neutral" 8 "Drive";
 
 
-// ==================================================================
-// 0x20B : VCU → BMS COMMAND FRAME
-// ==================================================================
-BO_ 523 VCU_BMS_COMMAND_FRAME: 8 VCU
- SG_ VCU_BMS_CMD            : 0|8@1+  (1,0) [0|255] "" BMS
- SG_ VCU_BMS_STATE_REQUEST  : 8|8@1+  (1,0) [0|7]   "" BMS
-
-VAL_ 523 VCU_BMS_CMD 0 "NoCmd" 1 "SwitchOn" 2 "SwitchOff";
-
-VAL_ 523 VCU_BMS_STATE_REQUEST
-  0 "NoRequest"
-  1 "Idle"
-  2 "HV_Active"
-  3 "Charge"
-  4 "Fault_Shutdown";
-
 
 // ==================================================================
 // 0x587 : VCU → PDU RELAY COMMAND FRAME
@@ -105,3 +89,18 @@ VAL_ 512 BMS_STATE
   5 "OPERATIONAL"
   6 "ACTIVE"
   7 "FAILURE";
+
+
+// ==================================================================
+// 0x107 : Pump Command Frame
+// ==================================================================
+BO_ 263 PUMP_COMMAND_FRAME: 8 VCU
+ SG_ PUMP_THROTTLE     : 0|8@1+  (1,0)   [0|100]   "%"      VCU
+ SG_ PUMP_FLOW         : 8|8@1+  (0.1,0) [0|25.5]  "L/min"  VCU
+ SG_ PUMP_CMD_STATE    : 16|8@1+ (1,0)   [0|255]   ""       VCU
+
+// ==================================================================
+// 0x607 : CCU/ZCU Command Frame (200ms)
+// ==================================================================
+BO_ 1543 CCU_ZCU_COMMAND_FRAME: 8 VCU
+ SG_ CCU_CMD : 0|8@1+ (1,0) [0|1] "" VCU
