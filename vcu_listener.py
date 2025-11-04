@@ -3,9 +3,9 @@ import sys
 import cantools
 import can
 from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QVBoxLayout, QHBoxLayout,
-    QWidget, QTableWidget, QTableWidgetItem, QLabel, QTextEdit,
-    QTabWidget, QProgressBar, QPushButton
+    QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget,
+    QTableWidget, QTableWidgetItem, QLabel, QTextEdit, QTabWidget,
+    QProgressBar, QPushButton
 )
 from PyQt5.QtCore import QTimer, Qt
 import threading
@@ -13,26 +13,26 @@ import time
 import traceback
 
 # === CONFIG ===
-DBC_FILE = 'DBC/vcu_full.dbc'
+DBC_FILE = 'DBC/vcu_updated.dbc'
 BITRATE = 250000
 CHANNEL = 'PCAN_USBBUS1'
 BUSTYPE = 'pcan'
 
 # === FRAME IDs FROM DBC ===
-ID_727 = 0x727   # 1831
-ID_587 = 0x587   # 1415
-ID_200 = 0x200   # 512 (BMS Status)
-ID_107 = 0x107   # 263 (Pump Command)
-ID_607 = 0x607   # 1543 (CCU/ZCU Command)
-# ==============
+ID_727 = 0x727  # 1831
+ID_587 = 0x587  # 1415
+ID_200 = 0x200  # 512 (BMS Status)
+ID_107 = 0x107  # 263 (Pump Command)
+ID_607 = 0x607  # 1543 (CCU/ZCU Command)
+ID_CMD_BMS = 0x4F0  # 1264 (NEW: COMMAND_FRAME_BMS)
 
+# ==============
 class CANMonitor(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("VCU CAN Monitor - 5 Frames (CONNECT/DISCONNECT)")
-        self.resize(1400, 850)
+        self.setWindowTitle("VCU CAN Monitor - 6 Frames (CONNECT/DISCONNECT)")
+        self.resize(1500, 900)
 
-        # CAN Bus (initially None)
         self.bus = None
         self.bus_connected = False
 
@@ -51,22 +51,19 @@ class CANMonitor(QMainWindow):
         self.signals_200 = {}
         self.signals_107 = {}
         self.signals_607 = {}
+        self.signals_cmd = {}        # NEW: for COMMAND_FRAME_BMS
+        self.raw_frames_200 = []
         self.raw_log_lines = []
         self.error_count = 0
         self.last_error_print = 0
 
-        # Thread lock
         self.lock = threading.Lock()
-
-        # GUI
         self.init_ui()
 
-        # Timer
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_gui)
         self.timer.start(100)
 
-        # CAN Thread (starts only when connected)
         self.thread = None
 
     def init_ui(self):
@@ -74,7 +71,7 @@ class CANMonitor(QMainWindow):
         self.setCentralWidget(central)
         layout = QVBoxLayout(central)
 
-        # === TOP BAR: CONNECT BUTTON + STATUS ===
+        # === TOP BAR ===
         top_bar = QHBoxLayout()
         self.connect_btn = QPushButton("CONNECT CAN")
         self.connect_btn.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold; padding: 8px;")
@@ -124,7 +121,7 @@ class CANMonitor(QMainWindow):
         l.addWidget(self.table_200)
         self.tabs.addTab(tab3, "0x200 - BMS")
 
-        # === TAB 4: 0x107 PUMP COMMAND ===
+        # === TAB 4: 0x107 PUMP ===
         tab4 = QWidget()
         l = QVBoxLayout(tab4)
         l.addWidget(QLabel("<h2>Pump Command (0x107)</h2>"))
@@ -138,7 +135,7 @@ class CANMonitor(QMainWindow):
         l.addWidget(self.pump_bar)
         self.tabs.addTab(tab4, "0x107 - Pump")
 
-        # === TAB 5: 0x607 CCU/ZCU COMMAND ===
+        # === TAB 5: 0x607 CCU/ZCU ===
         tab5 = QWidget()
         l = QVBoxLayout(tab5)
         l.addWidget(QLabel("<h2>CCU/ZCU Command (0x607)</h2>"))
@@ -150,6 +147,16 @@ class CANMonitor(QMainWindow):
         self.fresh_water_btn.setStyleSheet("font-weight: bold; color: red;")
         l.addWidget(self.fresh_water_btn)
         self.tabs.addTab(tab5, "0x607 - CCU/ZCU")
+
+        # === NEW TAB 6: 0x4F0 VCU COMMAND ===
+        tab6 = QWidget()
+        l = QVBoxLayout(tab6)
+        l.addWidget(QLabel("<h2>VCU to BMS Command (0x4F0)</h2>"))
+        self.table_cmd = QTableWidget()
+        self.table_cmd.setColumnCount(3)
+        self.table_cmd.setHorizontalHeaderLabels(["Signal", "State", "TS"])
+        l.addWidget(self.table_cmd)
+        self.tabs.addTab(tab6, "0x4F0 - VCU Cmd")
 
         # === RAW LOG ===
         self.raw_log = QTextEdit()
@@ -172,11 +179,8 @@ class CANMonitor(QMainWindow):
             self.connect_btn.setStyleSheet("background-color: #f44336; color: white; font-weight: bold; padding: 8px;")
             self.status_label.setText("CONNECTED")
             self.status_label.setStyleSheet("color: green; font-weight: bold;")
-
-            # Start listener thread
             self.thread = threading.Thread(target=self.can_listener, daemon=True)
             self.thread.start()
-
         except Exception as e:
             print(f"CAN Connect Error: {e}")
             traceback.print_exc()
@@ -187,23 +191,23 @@ class CANMonitor(QMainWindow):
         try:
             if self.bus:
                 self.bus.shutdown()
-                self.bus = None
+            self.bus = None
             self.bus_connected = False
             self.connect_btn.setText("CONNECT CAN")
             self.connect_btn.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold; padding: 8px;")
             self.status_label.setText("DISCONNECTED")
             self.status_label.setStyleSheet("color: red; font-weight: bold;")
 
-            # Clear all data
             with self.lock:
                 self.signals_727.clear()
                 self.signals_587.clear()
                 self.signals_200.clear()
                 self.signals_107.clear()
                 self.signals_607.clear()
+                self.signals_cmd.clear()
+                self.raw_frames_200.clear()
                 self.raw_log_lines.clear()
                 self.error_count = 0
-
         except Exception as e:
             print(f"CAN Disconnect Error: {e}")
 
@@ -214,30 +218,23 @@ class CANMonitor(QMainWindow):
                 if msg is None:
                     continue
 
-                # === IGNORE 0x400A001 ===
                 if msg.arbitration_id == 0x400A001:
                     continue
 
-                # === IGNORE ERROR FRAMES ===
                 if getattr(msg, 'is_error_frame', False):
                     self.error_count += 1
                     now = time.time()
                     if now - self.last_error_print > 1.0:
-                        print(f"[{now:.1f}] CAN ERROR FRAME #{self.error_count} (ignored)")
+                        print(f"[{now:.1f}] CAN ERROR FRAME #{self.error_count}")
                         self.last_error_print = now
                     continue
 
-                if self.error_count > 0:
-                    self.error_count = 0
-
                 raw = f"0x{msg.arbitration_id:03X} | {msg.data.hex().upper()} | {msg.timestamp:.3f}"
-
                 with self.lock:
                     self.raw_log_lines.append(raw)
                     if len(self.raw_log_lines) > 200:
                         self.raw_log_lines = self.raw_log_lines[-200:]
 
-                # === DECODE ===
                 try:
                     if msg.arbitration_id == ID_727:
                         decoded = self.db.decode_message(ID_727, msg.data)
@@ -252,12 +249,16 @@ class CANMonitor(QMainWindow):
                                 self.signals_587[n] = {"value": v, "unit": self.get_unit("VCU_PDU_COMMAND_FRAME", n), "ts": msg.timestamp}
 
                     elif msg.arbitration_id == ID_200:
-                        decoded = self.db.decode_message(ID_200, msg.data)
-                        with self.lock:
-                            for n, v in decoded.items():
-                                unit = self.get_unit("BMS_STATUS_FRAME", n)
-                                display = f"{v:.1f}" if isinstance(v, float) else str(v)
-                                self.signals_200[n] = {"value": v, "display": display, "unit": unit, "ts": msg.timestamp}
+                        if msg.dlc == 8:
+                            decoded = self.db.decode_message(ID_200, msg.data)
+                            with self.lock:
+                                self.raw_frames_200.append((msg.timestamp, msg.data))
+                                if len(self.raw_frames_200) > 1:
+                                    self.raw_frames_200.pop(0)
+                                for n, v in decoded.items():
+                                    unit = self.get_unit("BMS_STATUS_FRAME", n)
+                                    display = f"{v:.1f}" if isinstance(v, float) else str(v)
+                                    self.signals_200[n] = {"value": v, "display": display, "unit": unit, "ts": msg.timestamp}
 
                     elif msg.arbitration_id == ID_107:
                         decoded = self.db.decode_message(ID_107, msg.data)
@@ -283,6 +284,16 @@ class CANMonitor(QMainWindow):
                                     self.fresh_water_btn.setText(f"Fresh Water Pump: {status}")
                                     self.fresh_water_btn.setStyleSheet("font-weight: bold; color: green;" if status == "START" else "font-weight: bold; color: red;")
                                 self.signals_607[n] = {"value": v, "display": self.decode_ccu_cmd(v), "ts": msg.timestamp}
+
+                    # === NEW: 0x4F0 COMMAND_FRAME_BMS ===
+                    elif msg.arbitration_id == ID_CMD_BMS:
+                        decoded = self.db.decode_message(ID_CMD_BMS, msg.data)
+                        with self.lock:
+                            for n, v in decoded.items():
+                                state_names = {0: "INIT", 1: "SHUTDOWN", 2: "CHARGE", 3: "READY",
+                                               4: "SLEEP", 5: "OPERATIONAL", 6: "ACTIVE", 7: "FAILURE"}
+                                display = state_names.get(v, f"UNKNOWN({v})")
+                                self.signals_cmd[n] = {"value": v, "display": display, "ts": msg.timestamp}
 
                 except Exception as e:
                     print("Decode error:", e)
@@ -317,6 +328,7 @@ class CANMonitor(QMainWindow):
             s200 = list(self.signals_200.items())
             s107 = list(self.signals_107.items())
             s607 = list(self.signals_607.items())
+            s_cmd = list(self.signals_cmd.items())  # NEW
             raw = list(self.raw_log_lines[-8:])
 
         # === 0x727 ===
@@ -326,7 +338,8 @@ class CANMonitor(QMainWindow):
                 self.table_727.setItem(r, 0, QTableWidgetItem(n))
                 val = d.get("value")
                 if n == "VCU_PCU_PRND":
-                    try: val = self.db.get_message_by_frame_id(ID_727).get_signal_value_table(n).get(val, f"0x{val:02X}")
+                    try:
+                        val = self.db.get_message_by_frame_id(ID_727).get_signal_value_table(n).get(val, f"0x{val:02X}")
                     except: pass
                 elif n == "VCU_PCU_THROTTLE":
                     try:
@@ -344,13 +357,14 @@ class CANMonitor(QMainWindow):
         try:
             self.table_587.setRowCount(len(s587))
             for r, (n, d) in enumerate(s587):
-                raw = d.get("value")
+                raw_val = d.get("value")
                 cmd = ""
-                try: cmd = self.db.get_message_by_frame_id(ID_587).get_signal_value_table(n).get(raw, f"0x{raw:02X}")
-                except: cmd = str(raw)
+                try:
+                    cmd = self.db.get_message_by_frame_id(ID_587).get_signal_value_table(n).get(raw_val, f"0x{raw_val:02X}")
+                except: cmd = str(raw_val)
                 self.table_587.setItem(r, 0, QTableWidgetItem(n.replace("VCU_PDU_", "")))
                 self.table_587.setItem(r, 1, QTableWidgetItem(cmd))
-                item = QTableWidgetItem(f"{raw}")
+                item = QTableWidgetItem(f"{raw_val}")
                 item.setTextAlignment(Qt.AlignCenter)
                 self.table_587.setItem(r, 2, item)
                 self.table_587.setItem(r, 3, QTableWidgetItem(f"{d.get('ts', 0):.3f}"))
@@ -361,14 +375,15 @@ class CANMonitor(QMainWindow):
         try:
             self.table_200.setRowCount(len(s200))
             for r, (n, d) in enumerate(s200):
-                self.table_200.setItem(r, 0, QTableWidgetItem(n.replace("BMS_", "")))
+                self.table_200.setItem(r, 0, QTableWidgetItem(n))
                 self.table_200.setItem(r, 1, QTableWidgetItem(d.get("display", str(d.get("value", "")))))
                 self.table_200.setItem(r, 2, QTableWidgetItem(d.get("unit", "")))
                 self.table_200.setItem(r, 3, QTableWidgetItem(f"{d.get('ts', 0):.3f}"))
             self.table_200.resizeColumnsToContents()
-        except Exception as e: pass
+        except Exception as e:
+            print(f"table_200 error: {e}")
 
-        # === 0x107 PUMP COMMAND ===
+        # === 0x107 PUMP ===
         try:
             self.table_107.setRowCount(len(s107))
             for r, (n, d) in enumerate(s107):
@@ -379,7 +394,7 @@ class CANMonitor(QMainWindow):
             self.table_107.resizeColumnsToContents()
         except Exception as e: pass
 
-        # === 0x607 CCU/ZCU COMMAND ===
+        # === 0x607 CCU/ZCU ===
         try:
             self.table_607.setRowCount(len(s607))
             for r, (n, d) in enumerate(s607):
@@ -388,6 +403,17 @@ class CANMonitor(QMainWindow):
                 self.table_607.setItem(r, 2, QTableWidgetItem(f"{d.get('ts', 0):.3f}"))
             self.table_607.resizeColumnsToContents()
         except Exception as e: pass
+
+        # === NEW: 0x4F0 VCU COMMAND ===
+        try:
+            self.table_cmd.setRowCount(len(s_cmd))
+            for r, (n, d) in enumerate(s_cmd):
+                self.table_cmd.setItem(r, 0, QTableWidgetItem(n))
+                self.table_cmd.setItem(r, 1, QTableWidgetItem(d.get("display", "")))
+                self.table_cmd.setItem(r, 2, QTableWidgetItem(f"{d.get('ts', 0):.3f}"))
+            self.table_cmd.resizeColumnsToContents()
+        except Exception as e:
+            print(f"table_cmd error: {e}")
 
         # === RAW LOG ===
         try:
