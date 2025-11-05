@@ -48,6 +48,14 @@ BO_ 263 PUMP_COMMAND_FRAME: 8 VCU
 BO_ 1264 COMMAND_FRAME_BMS: 8 VCU
   SG_ VCU_STATE_REQUEST : 5|3@1+ (1,0) [0|7] "" BMS
 
+BO_ 1024 TCU_CONTROL_FRAME: 8 TCU
+ SG_ TCU_ANALOG_POSITION : 0|16@1+ (1,0) [0|5000] "" VCU
+ SG_ TCU_RELAY1_STATE : 16|2@1+ (1,0) [0|2] "" VCU
+ SG_ TCU_RELAY2_STATE : 18|2@1+ (1,0) [0|2] "" VCU
+ SG_ TCU_STATUS : 20|8@1+ (1,0) [0|255] "" VCU
+  SG_ TCU_THROTTLE_POSITION : 32|8@1- (1,0) [-100|100] "%" VCU
+
+
 BO_ 1415 VCU_PDU_COMMAND_FRAME: 8 VCU
   SG_ VCU_PDU_ENABLE : 0|1@0+ (1,0) [0|1] "" PDU
   SG_ VCU_PDU_B1_CMD : 8|1@0+ (1,0) [0|1] "" PDU
@@ -104,24 +112,24 @@ BO_ 1856 HMI_VCU_STATUS: 8 VCU
   SG_ VCU_BEEP_DIAG_KILL_SWITCH : 61|1@1+ (1,0) [0|1] "" Vector__XXX
 
 BO_ 1408 PDU_RELAY_STATUS: 8 PDU
-  SG_ PDU_PRECHG_CMD : 44|1@1+ (1,0) [0|1] "" VCU
-  SG_ PDU_MSG_COUNTER : 56|8@1+ (1,0) [0|255] "" VCU
-  SG_ PDU_B1_NEG_CMD : 0|1@1+ (1,0) [0|1] "" VCU
-  SG_ PDU_B1_NEG_STATUS : 3|1@1+ (1,0) [0|1] "" VCU
-  SG_ PDU_B2_NEG_CMD : 8|1@1+ (1,0) [0|1] "" VCU
-  SG_ PDU_B2_NEG_STATUS : 11|1@1+ (1,0) [0|1] "" VCU
-  SG_ PDU_B3_NEG_CMD : 16|1@1+ (1,0) [0|1] "" VCU
-  SG_ PDU_B3_NEG_STATUS : 19|1@1+ (1,0) [0|1] "" VCU
-  SG_ PDU_MOT_NEG_CMD : 24|1@1+ (1,0) [0|1] "" VCU
-  SG_ PDU_MOT_NEG_STATUS : 27|1@1+ (1,0) [0|1] "" VCU
-  SG_ PDU_B1_POS_CMD : 4|1@1+ (1,0) [0|1] "" VCU
-  SG_ PDU_B1_POS_STATUS : 7|1@1+ (1,0) [0|1] "" VCU
-  SG_ PDU_B2_POS_CMD : 12|1@1+ (1,0) [0|1] "" VCU
-  SG_ PDU_B2_POS_STATUS : 15|1@1+ (1,0) [0|1] "" VCU
-  SG_ PDU_B3_POS_CMD : 20|1@1+ (1,0) [0|1] "" VCU
-  SG_ PDU_B3_POS_STATUS : 23|1@1+ (1,0) [0|1] "" VCU
-  SG_ PDU_MOT_POS_CMD : 28|1@1+ (1,0) [0|1] "" VCU
-  SG_ PDU_MOT_POS_STATUS : 31|1@1+ (1,0) [0|1] "" VCU
+  SG_ PDU_B1_NEG_CMD          :  0|1@1+ (1,0) [0|1] "" VCU
+  SG_ PDU_B1_NEG_STATUS       :  3|1@1+ (1,0) [0|1] "" VCU
+  SG_ PDU_B1_POS_CMD          :  4|1@1+ (1,0) [0|1] "" VCU
+  SG_ PDU_B1_POS_STATUS       :  7|1@1+ (1,0) [0|1] "" VCU
+  SG_ PDU_B2_NEG_CMD          :  8|1@1+ (1,0) [0|1] "" VCU
+  SG_ PDU_B2_NEG_STATUS       : 11|1@1+ (1,0) [0|1] "" VCU
+  SG_ PDU_B2_POS_CMD          : 12|1@1+ (1,0) [0|1] "" VCU
+  SG_ PDU_B2_POS_STATUS       : 15|1@1+ (1,0) [0|1] "" VCU
+  SG_ PDU_B3_NEG_CMD          : 16|1@1+ (1,0) [0|1] "" VCU
+  SG_ PDU_B3_NEG_STATUS       : 19|1@1+ (1,0) [0|1] "" VCU
+  SG_ PDU_B3_POS_CMD          : 20|1@1+ (1,0) [0|1] "" VCU
+  SG_ PDU_B3_POS_STATUS       : 23|1@1+ (1,0) [0|1] "" VCU
+  SG_ PDU_MOT_NEG_CMD         : 24|1@1+ (1,0) [0|1] "" VCU
+  SG_ PDU  PDU_MOT_NEG_STATUS  : 27|1@1+ (1,0) [0|1] "" VCU
+  SG_ PDU_MOT_POS_CMD         : 28|1@1+ (1,0) [0|1] "" VCU
+  SG_ PDU_MOT_POS_STATUS      : 31|1@1+ (1,0) [0|1] "" VCU
+  SG_ PDU_PRECHG_CMD          : 44|1@1+ (1,0) [0|1] "" VCU
+  SG_ PDU_MSG_COUNTER         : 56|8@1+ (1,0) [0|255] "" VCU
 
 BO_ 1824 PCU_MOTOR_FRAME: 8 PCU
   SG_ PCU_MOTOR_HOURS : 0|16@1+ (1,0) [0|10000] "h" VCU
