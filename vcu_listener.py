@@ -562,32 +562,135 @@ class CANMonitor(QMainWindow):
                                 display = str(val)
                             self.signals_ccu[n] = {"value":val,"display":display,"unit":unit,"ts":msg.timestamp}
 
-                    elif msg.arbitration_id == ID_TCU_CONTROL:
-                        for n, v in decoded.items():
-                            val = self.safe_signal_value(v)
-                            unit = self.get_unit("TCU_CONTROL_FRAME", n)
-                            display = str(val)
-                            iv = self.int_or_zero(val)
 
-                            if n == "TCU_ANALOG_POSITION":
-                                display = f"{iv}"
-                                self.tcu_analog_bar.setValue(iv)
-                            elif n == "TCU_THROTTLE_POSITION":
-                                display = f"{iv:+}"
-                                self.tcu_throttle_bar.setValue(iv)
-                            elif n == "TCU_RELAY1_STATE":
-                                display = {0:"FREE",1:"OPEN",2:"CLOSE"}.get(iv, f"ERR{val}")
-                            elif n == "TCU_RELAY2_STATE":
-                                display = {0:"FREE",1:"OPEN",2:"CLOSE"}.get(iv, f"ERR{val}")
-                            elif n == "TCU_STATUS":
-                                bits = {0:"INC",1:"DEC",2:"MID",3:"FREE",4:"SETUP",7:"FLASH_FAIL"}
-                                active = [bits[i] for i in range(8) if (iv & (1 << i))]
-                                display = ", ".join(active) if active else "NORMAL"
-                            else:
+                    elif msg.arbitration_id == ID_TCU_CONTROL:
+
+                        # === TRY DBC FIRST, FALLBACK TO MANUAL ===
+
+                        data = msg.data
+
+                        if len(data) < 8:
+                            continue
+
+                        # Try DBC decode
+
+                        try:
+
+                            decoded = self.db.decode_message(msg.arbitration_id, msg.data)
+
+                            for n, v in decoded.items():
+
+                                val = self.safe_signal_value(v)
+
+                                unit = self.get_unit("TCU_CONTROL_FRAME", n)
+
                                 display = str(val)
 
-                            self.signals_tcu[n] = {"value":val,"display":display,"unit":unit,"ts":msg.timestamp}
+                                iv = self.int_or_zero(val)
 
+                                if n == "TCU_ANALOG_POSITION":
+
+                                    display = f"{iv}"
+
+                                    self.tcu_analog_bar.setValue(iv)
+
+                                elif n == "TCU_THROTTLE_POSITION":
+
+                                    display = f"{iv:+}"
+
+                                    self.tcu_throttle_bar.setValue(iv)
+
+                                elif n == "TCU_RELAY1_STATE":
+
+                                    display = {0: "FREE", 1: "OPEN", 2: "CLOSE"}.get(iv, f"ERR{val}")
+
+                                elif n == "TCU_RELAY2_STATE":
+
+                                    display = {0: "FREE", 1: "OPEN", 2: "CLOSE"}.get(iv, f"ERR{val}")
+
+                                elif n == "TCU_STATUS":
+
+                                    bits = {0: "INC", 1: "DEC", 2: "MID", 3: "FREE", 4: "SETUP", 7: "FLASH_FAIL"}
+
+                                    active = [bits[i] for i in range(8) if (iv & (1 << i))]
+
+                                    display = ", ".join(active) if active else "NORMAL"
+
+                                self.signals_tcu[n] = {"value": val, "display": display, "unit": unit,
+                                                       "ts": msg.timestamp}
+
+                        except Exception as e:
+
+                            # === FALLBACK: MANUAL DECODE ===
+
+                            print(f"DBC failed for 0x400, using manual decode: {e}")
+
+                            try:
+
+                                analog = int.from_bytes(data[0:2], 'little')
+
+                                relay1 = (data[2] >> 0) & 0x03
+
+                                relay2 = (data[2] >> 2) & 0x03
+
+                                throttle = data[4]
+
+                                if throttle > 127: throttle -= 256
+
+                                status = data[5]
+
+                                relay1_str = {0: "FREE", 1: "OPEN", 2: "CLOSE"}.get(relay1, f"ERR{relay1}")
+
+                                relay2_str = {0: "FREE", 1: "OPEN", 2: "CLOSE"}.get(relay2, f"ERR{relay2}")
+
+                                bits = {0: "INC", 1: "DEC", 2: "MID", 3: "FREE", 4: "SETUP", 7: "FLASH_FAIL"}
+
+                                active = [bits[i] for i in range(8) if (status & (1 << i))]
+
+                                status_str = ", ".join(active) if active else "NORMAL"
+
+                                with self.lock:
+
+                                    self.signals_tcu.update({
+
+                                        "TCU_ANALOG_POSITION": {"value": analog, "display": str(analog), "unit": "",
+                                                                "ts": msg.timestamp},
+
+                                        "TCU_RELAY1_STATE": {"value": relay1, "display": relay1_str, "unit": "",
+                                                             "ts": msg.timestamp},
+
+                                        "TCU_RELAY2_STATE": {"value": relay2, "display": relay2_str, "unit": "",
+                                                             "ts": msg.timestamp},
+
+                                        "TCU_STATUS": {"value": status, "display": status_str, "unit": "",
+                                                       "ts": msg.timestamp},
+
+                                        "TCU_THROTTLE_POSITION": {"value": throttle, "display": f"{throttle:+}",
+                                                                  "unit": "%", "ts": msg.timestamp},
+
+                                    })
+
+                                    self.tcu_analog_bar.setValue(analog)
+
+                                    self.tcu_throttle_bar.setValue(throttle)
+
+                                    self.tcu_relay_label.setText(f"Relay1: {relay1_str}, Relay2: {relay2_str}")
+
+                                    self.tcu_status_alert.setText(f"TCU STATUS: {status_str}")
+
+                                    self.tcu_status_alert.setStyleSheet(
+
+                                        "font-weight:bold;color:red;" if "FLASH_FAIL" in status_str
+
+                                        else "font-weight:bold;color:orange;" if "SETUP" in status_str
+
+                                        else "font-weight:bold;color:green;"
+
+                                    )
+
+                            except Exception as e2:
+
+                                print(f"Manual decode failed: {e2}")
             except can.CanError as e:
                 print(f"PCAN Error: {e}")
                 time.sleep(0.1)
