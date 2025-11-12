@@ -48,13 +48,6 @@ BO_ 263 PUMP_COMMAND_FRAME: 8 VCU
 BO_ 1264 COMMAND_FRAME_BMS: 8 VCU
   SG_ VCU_STATE_REQUEST : 5|3@1+ (1,0) [0|7] "" BMS
 
-BO_ 1024 TCU_CONTROL_FRAME: 8 TCU
- SG_ TCU_ANALOG_POSITION : 0|16@1+ (1,0) [0|5000] "" VCU
- SG_ TCU_RELAY1_STATE : 16|2@1+ (1,0) [0|2] "" VCU
- SG_ TCU_RELAY2_STATE : 18|2@1+ (1,0) [0|2] "" VCU
- SG_ TCU_STATUS : 20|8@1+ (1,0) [0|255] "" VCU
- SG_ TCU_THROTTLE_POSITION : 32|8@1- (1,0) [-100|100] "%" VCU
-
 
 BO_ 1415 VCU_PDU_COMMAND_FRAME: 8 VCU
   SG_ VCU_PDU_ENABLE : 0|1@0+ (1,0) [0|1] "" PDU
@@ -62,13 +55,6 @@ BO_ 1415 VCU_PDU_COMMAND_FRAME: 8 VCU
   SG_ VCU_PDU_B2_CMD : 16|1@0+ (1,0) [0|1] "" PDU
   SG_ VCU_PDU_B3_CMD : 24|1@0+ (1,0) [0|1] "" PDU
   SG_ VCU_PDU_MOT_CMD : 32|1@0+ (1,0) [0|1] "" PDU
-
-VAL_ 1415 VCU_PDU_CMD 0 "NoCmd" 1 "Switch" ;
-VAL_ 1415 VCU_PDU_BATTERY 0 "Open" 1 "Close" ;
-VAL_ 1415 VCU_PDU_MOT1 0 "Open" 1 "Close" ;
-VAL_ 1415 VCU_PDU_MOT2 0 "Open" 1 "Close" ;
-VAL_ 1415 VCU_PDU_GEN 0 "Open" 1 "Close" ;
-VAL_ 1415 VCU_PDU_CHG 0 "Open" 1 "Close" ;
 
 BO_ 1543 CCU_ZCU_COMMAND_FRAME: 8 VCU
  SG_ CCU_CMD : 0|8@1+ (1,0) [0|1] ""  VCU
@@ -193,42 +179,84 @@ BO_ 256 ZCU_PUMP_FRAME: 8 ZCU
   SG_ ZCU_MODE : 51|2@1+ (1,0) [0|3] "" VCU
   SG_ ZCU_ERROR_CODES : 56|8@1+ (1,0) [0|255] "" VCU
 
+// ==============================================================
+// ====================  BATTERY PACK MESSAGES  =================
+// ==============================================================
+
+// ---------------------  BATTERY 1 (BT1)  ---------------------
+BO_ 1024 BT1_DCL_CCL_SOC: 8 BMS
+  SG_ BT1_DCL       : 0|16@1+ (0.1,0) [0|6553.5] "A"     VCU   // Discharge Current Limit
+  SG_ BT1_CCL       : 16|16@1+ (0.1,0) [0|6553.5] "A"    VCU   // Charge Current Limit
+  SG_ BT1_SOC       : 32|16@1+ (0.01,0) [0|100.00] "%"   VCU   // State of Charge (x100)
+
+BO_ 1025 BT1_CURR_VOLT_STATE_BAL: 8 BMS
+  SG_ BT1_CURR      : 16|16@1- (0.1,0) [-3276|3276] "A"   VCU   // Current (x10)
+  SG_ BT1_VOLT      : 32|16@1+ (0.1,0) [0|655.3] "V"      VCU   // Voltage (x10)
+  SG_ BT1_STATE     : 56|1@1+ (1,0) [0|1] ""              VCU   // Bit 0 of byte 7
+  SG_ BT1_BALANCING : 59|4@1+ (1,0) [0|15] ""             VCU   // Bits 3–6 of byte 7
+
+BO_ 1027 BT1_TEMP: 8 BMS
+  SG_ BT1_TEMP      : 24|8@1+ (1,-40) [-40|87] "°C"       VCU   // Max cell temp
+
+BO_ 1030 BT1_FAILURE: 8 BMS
+  SG_ BT1_FAILURE   : 0|8@1+ (1,0) [0|255] ""            VCU   // Alarms
+
+BO_ 1029 BT1_RISO: 8 BMS
+  SG_ BT1_RISO      : 24|8@1+ (1,0) [0|180] "cells"      VCU   // Cells balanced
+
+// ---------------------  BATTERY 2 (BT2)  ---------------------
+BO_ 1056 BT2_DCL_CCL_SOC: 8 BMS
+  SG_ BT2_DCL       : 0|16@1+ (0.1,0) [0|6553.5] "A"     VCU
+  SG_ BT2_CCL       : 16|16@1+ (0.1,0) [0|6553.5] "A"    VCU
+  SG_ BT2_SOC       : 32|16@1+ (0.01,0) [0|100.00] "%"   VCU
+
+BO_ 1057 BT2_CURR_VOLT_STATE_BAL: 8 BMS
+  SG_ BT2_CURR      : 16|16@1- (0.1,0) [-3276|3276] "A"   VCU
+  SG_ BT2_VOLT      : 32|16@1+ (0.1,0) [0|655.3] "V"      VCU
+  SG_ BT2_STATE     : 56|1@1+ (1,0) [0|1] ""              VCU
+  SG_ BT2_BALANCING : 59|4@1+ (1,0) [0|15] ""             VCU
+
+BO_ 1059 BT2_TEMP: 8 BMS
+  SG_ BT2_TEMP      : 24|8@1+ (1,-40) [-40|87] "°C"       VCU
+
+BO_ 1062 BT2_FAILURE: 8 BMS
+  SG_ BT2_FAILURE   : 0|8@1+ (1,0) [0|255] ""            VCU
+
+BO_ 1285 BT2_RISO: 8 BMS   // 0x505 = 1285
+  SG_ BT2_RISO      : 24|8@1+ (1,0) [0|180] "cells"      VCU
+
+// ---------------------  BATTERY 3 (BT3)  ---------------------
+BO_ 1088 BT3_DCL_CCL_SOC: 8 BMS
+  SG_ BT3_DCL       : 0|16@1+ (0.1,0) [0|6553.5] "A"     VCU
+  SG_ BT3_CCL       : 16|16@1+ (0.1,0) [0|6553.5] "A"    VCU
+  SG_ BT3_SOC       : 32|16@1+ (0.01,0) [0|100.00] "%"   VCU
+
+BO_ 1089 BT3_CURR_VOLT_STATE_BAL: 8 BMS
+  SG_ BT3_CURR      : 16|16@1- (0.1,0) [-3276|3276] "A"   VCU
+  SG_ BT3_VOLT      : 32|16@1+ (0.1,0) [0|655.3] "V"      VCU
+  SG_ BT3_STATE     : 56|1@1+ (1,0) [0|1] ""              VCU
+  SG_ BT3_BALANCING : 59|4@1+ (1,0) [0|15] ""             VCU
+
+BO_ 1091 BT3_TEMP: 8 BMS
+  SG_ BT3_TEMP      : 24|8@1+ (1,-40) [-40|87] "°C"       VCU
+
+BO_ 1094 BT3_FAILURE: 8 BMS
+  SG_ BT3_FAILURE   : 0|8@1+ (1,0) [0|255] ""            VCU
+
+BO_ 1541 BT3_RISO: 8 BMS   // 0x605 = 1541
+  SG_ BT3_RISO      : 24|8@1+ (1,0) [0|180] "cells"      VCU
+
+
+
+
 CM_ SG_ 1856 VCU_BEEP_DIAG_NOT_IN_NEUTRAL "Beeping because not in neutral when attempting HV transition";
 CM_ SG_ 1856 VCU_BEEP_DIAG_HV_NOT_READY "Beeping because HV < 60V or transitioning";
 CM_ SG_ 1856 VCU_BEEP_DIAG_PDU_ESTOP "Beeping because PDU E-stop (contactor mismatch confirmed)";
 CM_ SG_ 1856 VCU_BEEP_DIAG_12V_UNDERVOLTAGE "Beeping because 12V undervoltage heading to shutdown";
 CM_ SG_ 1856 VCU_BEEP_DIAG_PDU_HVIL_OPEN "Beeping because PDU HVIL opened";
 CM_ SG_ 1856 VCU_BEEP_DIAG_KILL_SWITCH "Beeping because kill switch active or TCU timeout";
+// ==============================================================
+// ====================  SIGNAL GROUPS (TABS)  =================
+// ==============================================================
 
-VAL_ 512 VCU_STATE_REQUEST 0 "No_Request" 1 "Idle" 2 "HV_Active" 3 "Charge" 4 "Fault_Shutdown";
-VAL_ 1415 VCU_PDU_ENABLE 0 "Switching_Off" 1 "Switching_On";
-VAL_ 1415 VCU_PDU_B1_CMD 0 "Open" 1 "Close";
-VAL_ 1415 VCU_PDU_B2_CMD 0 "Open" 1 "Close";
-VAL_ 1415 VCU_PDU_B3_CMD 0 "Open" 1 "Close";
-VAL_ 1415 VCU_PDU_MOT_CMD 0 "Open" 1 "Close";
-VAL_ 1831 VCU_PCU_TRIM_DOWN_COMMAND 0 "Stop" 1 "Down";
-VAL_ 1831 VCU_PCU_TRIM_UP_COMMAND 0 "Stop" 1 "Up";
-VAL_ 1831 VCU_PCU_LED 0 "Off" 1 "On";
-VAL_ 1831 VCU_PCU_DRIVE_SELECT 0 "None" 1 "Dock" 2 "Reverse" 4 "Neutral" 8 "Drive";
-VAL_ 1831 VCU_PCU_KEY 0 "Not_present" 1 "Present";
-VAL_ 1831 VCU_PCU_DRIVE_CHARGE_STATE 0 "Not_present" 1 "Present";
-VAL_ 1831 VCU_PCU_DRIVE_CHARGE_15 0 "Not_present" 1 "Present";
-VAL_ 1831 VCU_PCU_HVIL 0 "Not_present" 1 "Present";
-VAL_ 1408 PDU_PRECHG_CMD 0 "Open" 1 "Close";
-VAL_ 1824 PCU_DRIVE_SEL 0 "None" 1 "Parking" 2 "Reverse" 4 "Neutral" 8 "Drive";
-VAL_ 1824 PCU_JAKE_STATE 0 "Not_present" 1 "Active";
-VAL_ 1824 PCU_BOOST_STATE 0 "Not_present" 1 "Active";
-VAL_ 1824 PCU_TRIM_STATE 0 "Not_present" 1 "Active";
-VAL_ 1824 PCU_IGN_STATE 0 "Not_present" 1 "Active";
-VAL_ 1824 PCU_FAILURE_MOT 0 "Ok" 1 "Failure";
-VAL_ 1824 PCU_FAILURE_INVERTER 0 "Ok" 1 "Failure";
-VAL_ 1824 PCU_FAILURE_POWER 0 "Ok" 1 "Failure";
-VAL_ 1824 PCU_FAILURE_INTERNAL 0 "Ok" 1 "Failure";
-VAL_ 1824 PCU_FAILURE_COOLING 0 "Ok" 1 "Failure";
-VAL_ 1824 PCU_FAILURE_CANBUS 0 "Ok" 1 "Failure";
-VAL_ 1824 PCU_FAILURE_FLASH 0 "Ok" 1 "Failure";
-VAL_ 1824 PCU_FAILURE_TEMP 0 "Ok" 1 "Failure";
-VAL_ 1828 PCU_MODE_ECO_SPORT 0 "Eco" 1 "Sport";
-VAL_ 1536 CCU_ERROR_CODES 0 "No_errors";
-VAL_ 256 ZCU_MODE 1 "Nominal" 2 "Derated" 3 "Critical";
-VAL_ 256 ZCU_ERROR_CODES 0 "No_errors" 175 "CAN_Bus_Timeout" 176 "Critical_Under_Temperature" 251 "Critical_Over_Temperature";
+// =====================  VALUE TABLES  =========================
