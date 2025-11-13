@@ -83,6 +83,15 @@ BO_ 1831 VCU_PCU_COMMAND_FRAME: 8 VCU
  SG_ VCU_PCU_UV_LIMIT : 32|16@1+ (0.1,0) [0|6553.5] "V"  PCU
  SG_ VCU_PCU_MAXCUR_LIMIT : 48|16@1+ (1,0) [0|65535] "A"  PCU
 
+BO_ 1838 ZCU_PUMP_STATUS: 8 ZCU
+ SG_ Current : 0|8@1+ (0.2,0) [0|50.8] "A" Vector__XXX
+ SG_ Temp_CPU : 8|8@1+ (1,40) [-40|215] "°C" Vector__XXX
+ SG_ Temp_Mos : 16|8@1+ (1,40) [-40|215] "°C" Vector__XXX
+ SG_ Voltage : 24|8@1+ (0.1,0) [0|25.5] "V" Vector__XXX
+ SG_ Power : 32|16@1+ (0.1,0) [0|6553.5] "W" Vector__XXX
+ SG_ Status : 48|8@1+ (1,0) [0|255] "" Vector__XXX
+
+
 BO_ 1856 HMI_VCU_STATUS: 8 VCU
   SG_ HMI_VCU_GPS_SPEED : 0|16@1+ (0.02302,0) [0|100] "MPH" Vector__XXX
   SG_ HMI_VCU_RANGE : 16|8@1+ (1,0) [0|300] "NM" Vector__XXX
@@ -170,14 +179,14 @@ BO_ 1536 CCU_STATUS_FRAME: 8 CCU
   SG_ CCU_ZCU_TEMP : 48|8@1- (1,-40) [-40|215] "Celcius" VCU
   SG_ CCU_ERROR_CODES : 56|8@1- (1,0) [0|255] "" VCU
 
-BO_ 256 ZCU_PUMP_FRAME: 8 ZCU
-  SG_ ZCU_CURRENT : 0|8@1+ (5,0) [0|50.8] "A" VCU
-  SG_ ZCU_MOSFET_TEMP : 16|8@1+ (1,-40) [-40|215] "Celcius" VCU
-  SG_ ZCU_INPUT_VOLTAGE : 24|8@1+ (10,0) [0|25.5] "V" VCU
-  SG_ ZCU_POWER_CONSUMPTION : 32|16@1+ (10,0) [0|6553.5] "W" VCU
-  SG_ ZCU_CAN_TIMEOUTFLAG : 49|1@1+ (1,0) [0|1] "" VCU
-  SG_ ZCU_MODE : 51|2@1+ (1,0) [0|3] "" VCU
-  SG_ ZCU_ERROR_CODES : 56|8@1+ (1,0) [0|255] "" VCU
+//BO_ 256 ZCU_PUMP_FRAME: 8 ZCU
+  //SG_ ZCU_CURRENT : 0|8@1+ (5,0) [0|50.8] "A" VCU
+  //SG_ ZCU_MOSFET_TEMP : 16|8@1+ (1,-40) [-40|215] "Celcius" VCU
+  //SG_ ZCU_INPUT_VOLTAGE : 24|8@1+ (10,0) [0|25.5] "V" VCU
+  //SG_ ZCU_POWER_CONSUMPTION : 32|16@1+ (10,0) [0|6553.5] "W" VCU
+  //SG_ ZCU_CAN_TIMEOUTFLAG : 49|1@1+ (1,0) [0|1] "" VCU
+  //SG_ ZCU_MODE : 51|2@1+ (1,0) [0|3] "" VCU
+  //SG_ ZCU_ERROR_CODES : 56|8@1+ (1,0) [0|255] "" VCU
 
 // ==============================================================
 // ====================  BATTERY PACK MESSAGES  =================

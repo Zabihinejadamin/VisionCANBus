@@ -1,5 +1,6 @@
 # vcu_gui_final.py
-# Full working version – all signals show, no blank tabs
+# FULL WORKING – 11 FRAMES + 0x72E ZCU PUMP (6 signals) + 3 BATTERIES
+# FIXED: Decode using DBC frame_id (1838), FULL DEBUG, NO CRASHES
 import sys
 import cantools
 import can
@@ -31,32 +32,31 @@ ID_PCU_COOL = 0x722
 ID_PCU_MOTOR = 0x720
 ID_PCU_POWER = 0x724
 ID_CCU_STATUS = 0x600
+ID_ZCU_PUMP = 0x72E  # ← ZCU PUMP STATUS
 
 # === BATTERY FRAME IDs (Hex) ===
-ID_BT1_DCL   = 0x400  # 1024
-ID_BT1_CURR  = 0x401  # 1025
-ID_BT1_TEMP  = 0x403  # 1027
-ID_BT1_FAIL  = 0x406  # 1030
-ID_BT1_RISO  = 0x405  # 1029
-
-ID_BT2_DCL   = 0x420  # 1056
-ID_BT2_CURR  = 0x421  # 1057
-ID_BT2_TEMP  = 0x423  # 1059
-ID_BT2_FAIL  = 0x426  # 1062
-ID_BT2_RISO  = 0x505  # 1285
-
-ID_BT3_DCL   = 0x440  # 1088
-ID_BT3_CURR  = 0x441  # 1089
-ID_BT3_TEMP  = 0x443  # 1091
-ID_BT3_FAIL  = 0x446  # 1094
-ID_BT3_RISO  = 0x605  # 1541
+ID_BT1_DCL = 0x400  # 1024
+ID_BT1_CURR = 0x401  # 1025
+ID_BT1_TEMP = 0x403  # 1027
+ID_BT1_FAIL = 0x406  # 1030
+ID_BT1_RISO = 0x405  # 1029
+ID_BT2_DCL = 0x420  # 1056
+ID_BT2_CURR = 0x421  # 1057
+ID_BT2_TEMP = 0x423  # 1059
+ID_BT2_FAIL = 0x426  # 1062
+ID_BT2_RISO = 0x505  # 1285
+ID_BT3_DCL = 0x440  # 1088
+ID_BT3_CURR = 0x441  # 1089
+ID_BT3_TEMP = 0x443  # 1091
+ID_BT3_FAIL = 0x446  # 1094
+ID_BT3_RISO = 0x605  # 1541
 
 # =============================================
 class CANMonitor(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("VCU CAN Monitor – 3 Batteries + 11 Frames")
-        self.resize(2600, 1400)
+        self.setWindowTitle("VCU CAN Monitor – 3 Batteries + 11 Frames + ZCU Pump")
+        self.resize(2800, 1400)
         self.bus = None
         self.bus_connected = False
 
@@ -69,16 +69,18 @@ class CANMonitor(QMainWindow):
         # Load DBC
         try:
             self.db = cantools.database.load_file(DBC_FILE)
-            print(f"DBC loaded: {len(self.db.messages)} messages")
+            print(f"\nDBC LOADED: {len(self.db.messages)} messages")
+            for m in self.db.messages:
+                print(f"  → {m.frame_id} | {m.name} | {m.length} bytes")
         except Exception as e:
-            print(f"DBC Error (non-fatal): {e}")
+            print(f"DBC LOAD ERROR: {e}")
             self.db = cantools.database.Database()
 
-        # === DATA CONTAINERS (ALL HEX IDs) ===
+        # === DATA CONTAINERS (HEX IDs) ===
         self.signals = {
             ID_727: {}, ID_587: {}, ID_107: {}, ID_607: {}, ID_CMD_BMS: {},
-            ID_PDU_STATUS: {}, ID_HMI_STATUS: {}, ID_PCU_COOL: {}, ID_PCU_MOTOR: {},
-            ID_PCU_POWER: {}, ID_CCU_STATUS: {},
+            ID_PDU_STATUS: {}, ID_HMI_STATUS: {}, ID_PCU_COOL: {}, ID_PCU_MOTOR: {}, ID_PCU_POWER: {}, ID_CCU_STATUS: {},
+            ID_ZCU_PUMP: {},  # ← ZCU PUMP
             # Batteries
             0x400: {}, 0x401: {}, 0x403: {}, 0x406: {}, 0x405: {},
             0x420: {}, 0x421: {}, 0x423: {}, 0x426: {}, 0x505: {},
@@ -136,7 +138,12 @@ class CANMonitor(QMainWindow):
         self.create_tab(ID_PCU_COOL, "0x722 – Cooling", "PCU Cooling", ["Signal","Value","Unit","TS"], ["PCU_WATERFLOW"])
         self.create_tab(ID_PCU_MOTOR, "0x720 – Motor", "PCU Motor", ["Signal","Value","Unit","TS"], ["PCU_MOTOR_TORQUE", "PCU_MOTOR_SPEED"])
         self.create_tab(ID_PCU_POWER, "0x724 – Power", "PCU Power", ["Signal","Value","Unit","TS"], ["PCU_INVERTER_CURRENT", "PCU_PUMP_PWM", "PCU_TRIM_POSITION"])
-        self.create_tab(ID_CCU_STATUS, "0x600 – CCU", "CCU Status", ["Signal","Value","Unit","TS"], ["CCU_GLYCOL_FLOW", "CCU_GLYLYCOL_THROTTLE", "CCU_ZCU_CURRENT"])
+        self.create_tab(ID_CCU_STATUS, "0x600 – CCU", "CCU Status", ["Signal","Value","Unit","TS"], ["CCU_GLYCOL_FLOW", "CCU_GLYCOL_THROTTLE", "CCU_ZCU_CURRENT"])
+
+        # === ZCU Pump Status ===
+        self.create_tab(ID_ZCU_PUMP, "0x72E – ZCU Pump", "ZCU Pump Status",
+                        ["Signal","Value","Unit","TS"],
+                        ["Current", "Temp_CPU", "Temp_Mos", "Voltage", "Power"])
 
         # === Battery Tabs ===
         self.create_battery_tab("Battery 1", 1, [0x400, 0x401, 0x403, 0x406, 0x405])
@@ -169,6 +176,24 @@ class CANMonitor(QMainWindow):
                 self.bars[(fid, sig)] = bar
                 hb.addWidget(bar)
             l.addLayout(hb)
+
+        # === ZCU PUMP SPECIAL ===
+        if fid == ID_ZCU_PUMP:
+            grid = QGridLayout()
+            alerts = [
+                ("PUMP DIR", "zcu_dir"),
+                ("CAN BUS", "zcu_can"),
+                ("PUMP MODE", "zcu_mode"),
+            ]
+            row = 0
+            for label, key in alerts:
+                lbl = QLabel(f"{label}: —")
+                lbl.setStyleSheet("font-weight:bold;")
+                self.alerts[(fid, key)] = lbl
+                grid.addWidget(QLabel(label + ":"), row, 0)
+                grid.addWidget(lbl, row, 1)
+                row += 1
+            l.addLayout(grid)
 
         self.tabs.addTab(t, name)
 
@@ -241,7 +266,7 @@ class CANMonitor(QMainWindow):
             self.status_label.setStyleSheet("color:green;font-weight:bold;")
             self.thread = threading.Thread(target=self.can_listener, daemon=True)
             self.thread.start()
-            print("CAN listener started")
+            print("\nCAN LISTENER STARTED\n")
         except Exception as e:
             print("CAN Connect Error:", e)
             traceback.print_exc()
@@ -268,37 +293,18 @@ class CANMonitor(QMainWindow):
             print("CAN Disconnect Error:", e)
 
     # -------------------------------------------------
-    # CAN Listener
+    # CAN Listener (WITH FULL DEBUG)
     # -------------------------------------------------
     def can_listener(self):
-        known = {
-            0x727: "VCU_PCU_CONTROL_FRAME",
-            0x587: "VCU_PDU_COMMAND_FRAME",
-            0x107: "PUMP_COMMAND_FRAME",
-            0x607: "CCU_ZCU_COMMAND_FRAME",
-            0x4F0: "VCU_BMS_COMMAND_FRAME",
-            0x580: "PDU_RELAY_STATUS",
-            0x740: "HMI_VCU_STATUS",
-            0x722: "PCU_COOLING_FRAME",
-            0x720: "PCU_MOTOR_FRAME",
-            0x724: "PCU_POWER_FRAME",
-            0x600: "CCU_STATUS_FRAME",
+        # === HEX → DBC FRAME ID MAPPING (MUST MATCH DBC) ===
+        HEX_TO_DBC_ID = {
+            0x727: 1831, 0x587: 1415, 0x107: 263, 0x607: 1543, 0x4F0: 1264,
+            0x580: 1408, 0x740: 1856, 0x722: 1826, 0x720: 1824, 0x724: 1828, 0x600: 1536,
+            0x72E: 1838,  # ← CRITICAL: MUST BE 1838 IN DBC
             # Batteries
-            0x400: "BT1_DCL_CCL_SOC",
-            0x401: "BT1_CURR_VOLT_STATE_BAL",
-            0x403: "BT1_TEMP",
-            0x406: "BT1_FAILURE",
-            0x405: "BT1_RISO",
-            0x420: "BT2_DCL_CCL_SOC",
-            0x421: "BT2_CURR_VOLT_STATE_BAL",
-            0x423: "BT2_TEMP",
-            0x426: "BT2_FAILURE",
-            0x505: "BT2_RISO",
-            0x440: "BT3_DCL_CCL_SOC",
-            0x441: "BT3_CURR_VOLT_STATE_BAL",
-            0x443: "BT3_TEMP",
-            0x446: "BT3_FAILURE",
-            0x605: "BT3_RISO",
+            0x400: 1024, 0x401: 1025, 0x403: 1027, 0x406: 1030, 0x405: 1029,
+            0x420: 1056, 0x421: 1057, 0x423: 1059, 0x426: 1062, 0x505: 1285,
+            0x440: 1088, 0x441: 1089, 0x443: 1091, 0x446: 1094, 0x605: 1541,
         }
 
         while self.bus_connected:
@@ -316,24 +322,45 @@ class CANMonitor(QMainWindow):
                     if len(self.raw_log_lines) > 200:
                         self.raw_log_lines.pop(0)
 
-                if msg.arbitration_id not in known:
+                dbc_id = HEX_TO_DBC_ID.get(msg.arbitration_id)
+                if dbc_id is None:
                     with self.lock: self.unknown_count += 1
                     continue
 
+                print(f"\n[DECODE] 0x{msg.arbitration_id:03X} → DBC {dbc_id} | {msg.data.hex().upper()}")
+
                 try:
-                    decoded = self.db.decode_message(msg.arbitration_id, msg.data)
+                    decoded = self.db.decode_message(dbc_id, msg.data)
+                    print(f"  → SUCCESS: {len(decoded)} signals")
+                    for name, val in decoded.items():
+                        print(f"    • {name} = {val}")
                 except Exception as e:
-                    print(f"Decode failed for 0x{msg.arbitration_id:03X}: {e}")
+                    print(f"  → FAILED: {e}")
+                    try:
+                        m = self.db.get_message_by_frame_id(dbc_id)
+                        print(f"  → DBC HAS: {m.name} | Signals: {[s.name for s in m.signals]}")
+                    except:
+                        print(f"  → NO MESSAGE ID {dbc_id} IN DBC!")
                     continue
+
+                # Get unit from DBC
+                try:
+                    msg_obj = self.db.get_message_by_frame_id(dbc_id)
+                    unit_map = {s.name: s.unit for s in msg_obj.signals}
+                except:
+                    unit_map = {}
 
                 with self.lock:
                     self.signals[msg.arbitration_id].update({
-                        name: {"v": val, "d": str(val), "u": "", "t": msg.timestamp}
+                        name: {
+                            "v": val,
+                            "d": f"{val:.2f}" if isinstance(val, float) else str(val),
+                            "u": unit_map.get(name, ""),
+                            "t": msg.timestamp
+                        }
                         for name, val in decoded.items()
                     })
-                    # Force GUI update on first signal of new frame
-                    if len(self.signals[msg.arbitration_id]) == len(decoded):
-                        self.last_gui_update = 0
+                    self.last_gui_update = 0
 
             except can.CanError:
                 time.sleep(0.05)
@@ -355,8 +382,7 @@ class CANMonitor(QMainWindow):
             raw = self.raw_log_lines[-8:]
 
         # Update regular tables
-        for fid in [ID_727, ID_587, ID_107, ID_607, ID_CMD_BMS, ID_PDU_STATUS,
-                    ID_HMI_STATUS, ID_PCU_COOL, ID_PCU_MOTOR, ID_PCU_POWER, ID_CCU_STATUS]:
+        for fid in [ID_727, ID_587, ID_107, ID_607, ID_CMD_BMS, ID_PDU_STATUS, ID_HMI_STATUS, ID_PCU_COOL, ID_PCU_MOTOR, ID_PCU_POWER, ID_CCU_STATUS, ID_ZCU_PUMP]:
             table = self.tables.get(fid)
             if not table: continue
             items = data.get(fid, [])
@@ -398,19 +424,71 @@ class CANMonitor(QMainWindow):
 
         # Update progress bars & alerts
         try:
+            # === ZCU PUMP UPDATE ===
+            fid = ID_ZCU_PUMP
+            curr = next((d["v"] for n,d in data.get(fid, []) if n == "Current"), 0)
+            bar = self.bars.get((fid, "Current"))
+            if bar:
+                pct = int(curr / 50.8 * 100)
+                bar.setValue(max(0, min(100, pct)))
+                bar.setFormat(f"Current: {curr:.1f}A")
+
+            temp_cpu = next((d["v"] for n,d in data.get(fid, []) if n == "Temp_CPU"), 0)
+            bar = self.bars.get((fid, "Temp_CPU"))
+            if bar:
+                pct = int((temp_cpu + 40) / 255 * 100)
+                bar.setValue(max(0, min(100, pct)))
+                bar.setFormat(f"Temp_CPU: {temp_cpu:.0f}°C")
+
+            temp_mos = next((d["v"] for n,d in data.get(fid, []) if n == "Temp_Mos"), 0)
+            bar = self.bars.get((fid, "Temp_Mos"))
+            if bar:
+                pct = int((temp_mos + 40) / 255 * 100)
+                bar.setValue(max(0, min(100, pct)))
+                bar.setFormat(f"Temp_Mos: {temp_mos:.0f}°C")
+
+            volt = next((d["v"] for n,d in data.get(fid, []) if n == "Voltage"), 0)
+            bar = self.bars.get((fid, "Voltage"))
+            if bar:
+                pct = int(volt / 25.5 * 100)
+                bar.setValue(max(0, min(100, pct)))
+                bar.setFormat(f"Voltage: {volt:.1f}V")
+
+            power = next((d["v"] for n,d in data.get(fid, []) if n == "Power"), 0)
+            bar = self.bars.get((fid, "Power"))
+            if bar:
+                pct = int(power / 6553.5 * 100)
+                bar.setValue(max(0, min(100, pct)))
+                bar.setFormat(f"Power: {power:.1f}W")
+
+            status = next((d["v"] for n,d in data.get(fid, []) if n == "Status"), 0)
+            dir_text = "Clockwise" if (status & 0x01) == 0 else "Counter-Clockwise"
+            self.alerts[(fid, "zcu_dir")].setText(dir_text)
+            self.alerts[(fid, "zcu_dir")].setStyleSheet("font-weight:bold;color:green;")
+
+            can_text = "OK" if (status & 0x02) == 0 else "TIMEOUT"
+            color = "green" if (status & 0x02) == 0 else "red"
+            self.alerts[(fid, "zcu_can")].setText(can_text)
+            self.alerts[(fid, "zcu_can")].setStyleSheet(f"font-weight:bold;color:{color};")
+
+            mode = (status >> 3) & 0x03
+            mode_text = ["Unknown", "Nominal", "Derated", "Critical"][mode]
+            color = ["gray", "green", "orange", "red"][mode]
+            self.alerts[(fid, "zcu_mode")].setText(mode_text)
+            self.alerts[(fid, "zcu_mode")].setStyleSheet(f"font-weight:bold;color:{color};")
+
+            # === BATTERIES (unchanged) ===
             for idx, prefix in [(1, "BT1"), (2, "BT2"), (3, "BT3")]:
-                dcl_id  = {1:0x400, 2:0x420, 3:0x440}[idx]
+                dcl_id = {1:0x400, 2:0x420, 3:0x440}[idx]
                 curr_id = {1:0x401, 2:0x421, 3:0x441}[idx]
                 temp_id = {1:0x403, 2:0x423, 3:0x443}[idx]
                 fail_id = {1:0x406, 2:0x426, 3:0x446}[idx]
                 riso_id = {1:0x405, 2:0x505, 3:0x605}[idx]
 
-                # SOC
                 soc = next((d["v"] for n,d in data.get(dcl_id, []) if n == f"{prefix}_SOC"), 0)
                 bar = self.bars.get((f"BT{idx}", f"{prefix}_SOC"))
                 if bar: bar.setValue(int(soc))
 
-                # Current
                 curr = next((d["v"] for n,d in data.get(curr_id, []) if n == f"{prefix}_CURR"), 0)
                 bar = self.bars.get((f"BT{idx}", f"{prefix}_CURR"))
                 if bar:
@@ -418,7 +496,6 @@ class CANMonitor(QMainWindow):
                     bar.setValue(max(0, min(100, pct)))
                     bar.setFormat(f"{prefix}_CURR: {curr:+.0f}A")
 
-                # Voltage
                 volt = next((d["v"] for n,d in data.get(curr_id, []) if n == f"{prefix}_VOLT"), 0)
                 bar = self.bars.get((f"BT{idx}", f"{prefix}_VOLT"))
                 if bar:
@@ -426,7 +503,6 @@ class CANMonitor(QMainWindow):
                     bar.setValue(max(0, min(100, pct)))
                     bar.setFormat(f"{prefix}_VOLT: {volt:.1f}V")
 
-                # Temp
                 temp = next((d["v"] for n,d in data.get(temp_id, []) if n == f"{prefix}_TEMP"), 0)
                 bar = self.bars.get((f"BT{idx}", f"{prefix}_TEMP"))
                 if bar:
@@ -434,7 +510,6 @@ class CANMonitor(QMainWindow):
                     bar.setValue(max(0, min(100, pct)))
                     bar.setFormat(f"{prefix}_TEMP: {temp:.0f}°C")
 
-                # DCL/CCL
                 dcl = next((d["v"] for n,d in data.get(dcl_id, []) if n == f"{prefix}_DCL"), 0)
                 ccl = next((d["v"] for n,d in data.get(dcl_id, []) if n == f"{prefix}_CCL"), 0)
                 for sig, val in [(f"{prefix}_DCL", dcl), (f"{prefix}_CCL", ccl)]:
@@ -444,7 +519,6 @@ class CANMonitor(QMainWindow):
                         bar.setValue(max(0, min(100, pct)))
                         bar.setFormat(f"{sig}: {val:.0f}A")
 
-                # RISO
                 riso = next((d["v"] for n,d in data.get(riso_id, []) if n == f"{prefix}_RISO"), 0)
                 bar = self.bars.get((f"BT{idx}", f"{prefix}_RISO"))
                 if bar:
@@ -452,7 +526,6 @@ class CANMonitor(QMainWindow):
                     bar.setValue(max(0, min(100, pct)))
                     bar.setFormat(f"{prefix}_RISO: {riso} cells")
 
-                # Alerts
                 state = next((d["v"] for n,d in data.get(curr_id, []) if n == f"{prefix}_STATE"), 0)
                 bal   = next((d["v"] for n,d in data.get(curr_id, []) if n == f"{prefix}_BALANCING"), 0)
                 fail  = next((d["v"] for n,d in data.get(fail_id, []) if n == f"{prefix}_FAILURE"), 0)
