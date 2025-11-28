@@ -77,6 +77,8 @@ class CANMonitor(QMainWindow):
         all_ids += BAT1_FRAMES + BAT2_FRAMES + BAT3_FRAMES
 
         self.signals = {id_: {} for id_ in set(all_ids)}
+        self.current_hex = {id_: "00 00 00 00 00 00 00 00" for id_ in set(all_ids)}
+        self.hex_labels = {}
         self.first_fill = {k: True for k in self.signals}
         self.first_fill.update({f"BT{i}": True for i in [1,2,3]})
 
@@ -313,6 +315,13 @@ class CANMonitor(QMainWindow):
         w = QWidget()
         l = QVBoxLayout(w)
         l.addWidget(QLabel(title))
+
+        # Add hex display label
+        hex_label = QLabel(f"0x{fid:03X}: {self.current_hex.get(fid, '00 00 00 00 00 00 00 00')}")
+        hex_label.setStyleSheet("font-family: Consolas; font-size: 11px; color: #666; padding: 2px;")
+        self.hex_labels[fid] = hex_label
+        l.addWidget(hex_label)
+
         table = QTableWidget()
         table.setColumnCount(len(headers))
         table.setHorizontalHeaderLabels(headers)
@@ -326,6 +335,16 @@ class CANMonitor(QMainWindow):
         w = QWidget()
         main = QVBoxLayout(w)
         main.addWidget(QLabel(title))
+
+        # Add hex display label
+        if can_id > 0x7FF:  # Extended ID
+            hex_label = QLabel(f"0x{can_id:08X}: {self.current_hex.get(can_id, '00 00 00 00 00 00 00 00')}")
+        else:  # Standard ID
+            hex_label = QLabel(f"0x{can_id:03X}: {self.current_hex.get(can_id, '00 00 00 00 00 00 00 00')}")
+        hex_label.setStyleSheet("font-family: Consolas; font-size: 11px; color: #666; padding: 2px;")
+        self.hex_labels[can_id] = hex_label
+        main.addWidget(hex_label)
+
         splitter = QSplitter(Qt.Horizontal)
         main.addWidget(splitter)
 
@@ -400,6 +419,13 @@ class CANMonitor(QMainWindow):
         for cid in BAT1_EMULATOR_IDS:
             box = QGroupBox(f"0x{cid:03X}")
             bl = QVBoxLayout(box)
+
+            # Add hex display label for this frame
+            hex_label = QLabel(f"0x{cid:03X}: {self.current_hex.get(cid, '00 00 00 00 00 00 00 00')}")
+            hex_label.setStyleSheet("font-family: Consolas; font-size: 10px; color: #666; padding: 1px;")
+            self.hex_labels[cid] = hex_label
+            bl.addWidget(hex_label)
+
             line = QLineEdit(defaults.get(cid, "00 00 00 00 00 00 00 00"))
             line.setFixedWidth(340)
             self.bat_inputs[cid] = line
@@ -422,6 +448,16 @@ class CANMonitor(QMainWindow):
         w = QWidget()
         l = QVBoxLayout(w)
         l.addWidget(QLabel(name))
+
+        # Add hex displays for all frames in this battery
+        hex_layout = QHBoxLayout()
+        for fid in frame_ids:
+            hex_label = QLabel(f"0x{fid:03X}: {self.current_hex.get(fid, '00 00 00 00 00 00 00 00')}")
+            hex_label.setStyleSheet("font-family: Consolas; font-size: 10px; color: #666; padding: 1px; margin-right: 10px;")
+            self.hex_labels[fid] = hex_label
+            hex_layout.addWidget(hex_label)
+        l.addLayout(hex_layout)
+
         table = QTableWidget()
         table.setColumnCount(4)
         table.setHorizontalHeaderLabels(["Signal","Value","Unit","TS"])
@@ -485,6 +521,17 @@ class CANMonitor(QMainWindow):
             self.raw_log_lines.append(f"0x{msg.arbitration_id:08X} | {msg.data.hex(' ').upper()}")
             if len(self.raw_log_lines) > 200:
                 self.raw_log_lines.pop(0)
+
+            # Update current hex data for this ID
+            hex_data = msg.data.hex(' ').upper()
+            self.current_hex[msg.arbitration_id] = hex_data
+
+            # Update hex display label if it exists
+            if msg.arbitration_id in self.hex_labels:
+                if msg.arbitration_id > 0x7FF:  # Extended ID
+                    self.hex_labels[msg.arbitration_id].setText(f"0x{msg.arbitration_id:08X}: {hex_data}")
+                else:  # Standard ID
+                    self.hex_labels[msg.arbitration_id].setText(f"0x{msg.arbitration_id:03X}: {hex_data}")
 
         fid = msg.arbitration_id
 
