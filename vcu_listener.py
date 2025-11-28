@@ -30,6 +30,8 @@ ID_CCU_STATUS = 0x600
 ID_ZCU_PUMP = 0x72E
 ID_HV_CHARGER_STATUS = 0x18FF50E5
 ID_HV_CHARGER_CMD = 0x1806E5F4
+ID_DC12_COMM = 0x1800F5E5
+ID_DC12_STAT = 0x1800E5F5
 
 # ALL BATTERY FRAMES (now complete)
 BAT1_FRAMES = [0x400, 0x401, 0x402, 0x403, 0x404, 0x405, 0x406]
@@ -41,7 +43,7 @@ BAT1_EMULATOR_IDS = [0x400, 0x401, 0x402, 0x403, 0x404, 0x405, 0x406]
 
 EMULATOR_STATES = {k: False for k in [
     0x727,0x587,0x107,0x607,0x4F0,0x580,0x600,0x720,0x722,0x724,0x72E,
-    ID_HV_CHARGER_STATUS, ID_HV_CHARGER_CMD
+    ID_HV_CHARGER_STATUS, ID_HV_CHARGER_CMD, ID_DC12_COMM, ID_DC12_STAT
 ]}
 EMULATOR_INTERVAL = 0.1
 EMULATOR_BAT1_ENABLED = False
@@ -71,7 +73,7 @@ class CANMonitor(QMainWindow):
 
         all_ids = [ID_727,ID_587,ID_107,ID_607,ID_CMD_BMS,ID_PDU_STATUS,ID_HMI_STATUS,
                    ID_PCU_COOL,ID_PCU_MOTOR,ID_PCU_POWER,ID_CCU_STATUS,ID_ZCU_PUMP,
-                   ID_HV_CHARGER_STATUS, ID_HV_CHARGER_CMD]
+                   ID_HV_CHARGER_STATUS, ID_HV_CHARGER_CMD, ID_DC12_COMM, ID_DC12_STAT]
         all_ids += BAT1_FRAMES + BAT2_FRAMES + BAT3_FRAMES
 
         self.signals = {id_: {} for id_ in set(all_ids)}
@@ -155,6 +157,30 @@ class CANMonitor(QMainWindow):
                 ("150A + EOC", "1D 88 00 96 01 00 00 00"),
                 ("200A + EOC", "1D 88 00 C8 01 00 00 00"),
                 ("150A No EOC", "00 00 00 96 00 00 00 00"),
+            ]
+        )
+
+        self.create_emulator_tab(
+            can_id=ID_DC12_COMM,
+            tab_name="DC12 Comm",
+            title="DC12 Charger Communication",
+            default_payload="00 01 90 00 F4 01 00 00",
+            presets=[
+                ("Stop", "55 00 41 0E CC 00 DC 00"),
+                ("Start 90V 20A", "55 01 5A 0E C8 01 DC 00"),
+                ("Start 60V 15A", "55 01 3C 0E 96 01 DC 00"),
+            ]
+        )
+
+        self.create_emulator_tab(
+            can_id=ID_DC12_STAT,
+            tab_name="DC12 Stat",
+            title="DC12 Charger Status",
+            default_payload="00 00 00 47 00 47 01 46",
+            presets=[
+                ("Ready State_C", "55 00 41 0E CC 01 DC 00"),
+                ("Charging 15A 400V", "55 01 96 0F A0 01 DC 00"),
+                ("Charging 20A 450V", "55 01 C8 11 2C 01 DC 00"),
             ]
         )
 
@@ -245,13 +271,41 @@ class CANMonitor(QMainWindow):
             "HV_Charger_Temp": {"d": f"{temp:+.0f}", "u": "°C"},
         }
 
+    def decode_dc12_comm(self, data):
+        if len(data) < 8: return {}
+        b = data
+        start_stop = "Start" if b[1] == 1 else "Stop"
+        voltage_setpoint = b[2] * 0.1  # 1 bit per 0.1V (user wrote "0.1 A" but that must be a typo)
+        max_current = b[4] * 0.1  # 1 bit per 0.1A
+        active = "Active" if b[5] == 1 else "Not Active"
+        return {
+            "Start_Stop": {"d": start_stop, "u": ""},
+            "Voltage_Setpoint": {"d": f"{voltage_setpoint:.1f}", "u": "V"},
+            "Max_Current": {"d": f"{max_current:.1f}", "u": "A"},
+            "Charger_Active": {"d": active, "u": ""},
+        }
+
+    def decode_dc12_stat(self, data):
+        if len(data) < 8: return {}
+        b = data
+        status = "State_A" if b[1] == 1 else "State_C"
+        current = b[3] * 0.1  # Charging current in A, 1 bit per 0.1A
+        voltage = b[5] * 0.1  # DC bus voltage in V, 1 bit per 0.1V
+        temperature = b[7] - 40  # Temperature in °C, offset by -40
+        return {
+            "Charger_Status": {"d": status, "u": ""},
+            "Charging_Current": {"d": f"{current:.1f}", "u": "A"},
+            "DC_Bus_Voltage": {"d": f"{voltage:.1f}", "u": "V"},
+            "Charger_Temperature": {"d": f"{temperature:+}", "u": "°C"},
+        }
+
     HEX_TO_DBC_ID = {
         0x727:1831, 0x587:1415, 0x107:263, 0x607:1543, 0x4F0:1264, 0x580:1408, 0x740:1856,
         0x722:1826, 0x720:1824, 0x724:1828, 0x600:1536, 0x72E:1838,
         0x400:1024, 0x401:1025, 0x403:1027, 0x405:1029, 0x406:1030,
         0x420:1056, 0x421:1057, 0x423:1059, 0x425:1061, 0x426:1062,
         0x440:1088, 0x441:1089, 0x443:1091, 0x445:1093, 0x446:1094,
-        ID_HV_CHARGER_STATUS: None, ID_HV_CHARGER_CMD: None
+        ID_HV_CHARGER_STATUS: None, ID_HV_CHARGER_CMD: None, ID_DC12_COMM: None, ID_DC12_STAT: None
     }
 
     # === GUI CREATION ===
@@ -438,6 +492,10 @@ class CANMonitor(QMainWindow):
             decoded_signals = self.decode_hv_charger_status(msg.data)
         elif fid == ID_HV_CHARGER_CMD:
             decoded_signals = self.decode_hv_charger_cmd(msg.data)
+        elif fid == ID_DC12_COMM:
+            decoded_signals = self.decode_dc12_comm(msg.data)
+        elif fid == ID_DC12_STAT:
+            decoded_signals = self.decode_dc12_stat(msg.data)
         elif fid in [0x402,0x422,0x442,0x404,0x424,0x444,0x405,0x425,0x445,0x406,0x426,0x446]:
             decoded_signals = self.decode_battery_frame(fid, msg.data)
         else:
