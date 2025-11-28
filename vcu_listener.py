@@ -30,7 +30,6 @@ ID_CCU_STATUS = 0x600
 ID_ZCU_PUMP = 0x72E
 ID_HV_CHARGER_STATUS = 0x18FF50E5
 ID_HV_CHARGER_CMD = 0x1806E5F4
-ID_DC12_COMM = 0x1800F5E5
 
 BAT1_FRAMES = [0x400,0x401,0x402,0x403,0x404,0x405,0x406]
 BAT2_FRAMES = [0x420,0x421,0x422,0x423,0x424,0x425,0x426]
@@ -41,7 +40,7 @@ BAT1_EMULATOR_IDS = [0x400, 0x401, 0x402, 0x403, 0x404, 0x405, 0x406]
 
 EMULATOR_STATES = {k: False for k in [
     0x727,0x587,0x107,0x607,0x4F0,0x580,0x600,0x720,0x722,0x724,0x72E,
-    ID_HV_CHARGER_STATUS, ID_HV_CHARGER_CMD, ID_DC12_COMM
+    ID_HV_CHARGER_STATUS, ID_HV_CHARGER_CMD
 ]}
 EMULATOR_INTERVAL = 0.1
 EMULATOR_BAT1_ENABLED = False
@@ -106,30 +105,6 @@ def decode_battery_message(arbid, data):
     return signals
 
 
-def decode_dc12_message(data):
-    if len(data) < 8: return {}
-    b = list(data)
-    signals = {}
-
-    # Byte 1: start/stop (1 = start, 0 = stop)
-    start_stop = "Start" if b[1] == 1 else "Stop"
-    signals["Start_Stop"] = {"d": start_stop, "u": ""}
-
-    # Byte 2: voltage setpoint (V) 1 bit per 0.1V
-    voltage_setpoint = b[2] * 0.1
-    signals["Voltage_Setpoint"] = {"d": f"{voltage_setpoint:.1f}", "u": "V"}
-
-    # Byte 4: max current (A) 1 bit per 0.1A
-    max_current = b[4] * 0.1
-    signals["Max_Current"] = {"d": f"{max_current:.1f}", "u": "A"}
-
-    # Byte 5: Active signal (0: not active, 1: active)
-    active = "Active" if b[5] == 1 else "Not Active"
-    signals["Charger_Active"] = {"d": active, "u": ""}
-
-    return signals
-
-
 class CANMonitor(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -151,7 +126,7 @@ class CANMonitor(QMainWindow):
 
         all_ids = [ID_727,ID_587,ID_107,ID_607,ID_CMD_BMS,ID_PDU_STATUS,ID_HMI_STATUS,
                    ID_PCU_COOL,ID_PCU_MOTOR,ID_PCU_POWER,ID_CCU_STATUS,ID_ZCU_PUMP,
-                   ID_HV_CHARGER_STATUS,ID_HV_CHARGER_CMD,ID_DC12_COMM]
+                   ID_HV_CHARGER_STATUS,ID_HV_CHARGER_CMD]
         all_ids += BAT1_FRAMES + BAT2_FRAMES + BAT3_FRAMES
         all_ids += [BAT1_VIRTUAL_ID, BAT2_VIRTUAL_ID, BAT3_VIRTUAL_ID]
 
@@ -196,9 +171,8 @@ class CANMonitor(QMainWindow):
         self.create_emulator_tab(0x722, "0x722 – Cooling", "Cooling", "39 38 00 3C 39 3B 28 39")
         self.create_emulator_tab(0x724, "0x724 – Power", "Power", "E4 8A 28 1D E5 1A 3A 5E")
         self.create_emulator_tab(0x72E, "0x72E – ZCU Pump", "ZCU", "28 00 00 00 00 3C 08 00")
-        self.create_emulator_tab(ID_HV_CHARGER_STATUS, "HVC Status", "Charger Status", "1B 01 00 80 00 00 43 00")
-        self.create_emulator_tab(ID_HV_CHARGER_CMD, "HVC CMD", "Charger CMD", "1D 88 00 96 01 00 00 00")
-        self.create_emulator_tab(ID_DC12_COMM, "DC12 Comm", "DC12 Charger Communication", "00 01 90 00 F4 01 00 00")
+        self.create_emulator_tab(ID_HV_CHARGER_STATUS, "0x18FF50E5 – Charger", "Charger Status", "1B 01 00 80 00 00 43 00")
+        self.create_emulator_tab(ID_HV_CHARGER_CMD, "0x1806E5F4 – CMD", "Charger CMD", "1D 88 00 96 01 00 00 00")
         self.create_tab(ID_HMI_STATUS, "0x740 – HMI", "HMI", ["Signal","Value","Unit","TS"])
 
         self.create_battery_tab_with_emulator("Battery 1", 1, BAT1_FRAMES)
@@ -399,17 +373,6 @@ class CANMonitor(QMainWindow):
             if decoded:
                 with self.lock:
                     self.signals[virtual_id].update({
-                        k: {"d": v["d"], "u": v.get("u", ""), "t": time.time()}
-                        for k, v in decoded.items()
-                    })
-            return
-
-        # Handle DC12 comm messages
-        if arb == ID_DC12_COMM:
-            decoded = decode_dc12_message(msg.data)
-            if decoded:
-                with self.lock:
-                    self.signals[arb].update({
                         k: {"d": v["d"], "u": v.get("u", ""), "t": time.time()}
                         for k, v in decoded.items()
                     })
