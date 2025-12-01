@@ -12,8 +12,12 @@ import time
 # === CONFIG ===
 DBC_FILE = 'DBC/vcu_updated.dbc'
 BITRATE = 250000
-CHANNEL = 'PCAN_USBBUS1'
-BUSTYPE = 'pcan'
+# CAN1 Configuration
+CHANNEL1 = 'PCAN_USBBUS1'
+BUSTYPE1 = 'pcan'
+# CAN2 Configuration
+CHANNEL2 = 'PCAN_USBBUS2'
+BUSTYPE2 = 'pcan'
 
 # === CAN IDs ===
 ID_727 = 0x727
@@ -32,6 +36,7 @@ ID_HV_CHARGER_STATUS = 0x18FF50E5
 ID_HV_CHARGER_CMD = 0x1806E5F4
 ID_DC12_COMM = 0x1800F5E5
 ID_DC12_STAT = 0x1800E5F5
+ID_TEMP_FRAME = 0x111
 
 # ALL BATTERY FRAMES (now complete)
 BAT1_FRAMES = [0x400, 0x401, 0x402, 0x403, 0x404, 0x405, 0x406]
@@ -43,10 +48,30 @@ BAT1_EMULATOR_IDS = [0x400, 0x401, 0x402, 0x403, 0x404, 0x405, 0x406]
 
 EMULATOR_STATES = {k: False for k in [
     0x727,0x587,0x107,0x607,0x4F0,0x580,0x600,0x720,0x722,0x724,0x72E,
-    ID_HV_CHARGER_STATUS, ID_HV_CHARGER_CMD, ID_DC12_COMM, ID_DC12_STAT
+    ID_HV_CHARGER_STATUS, ID_HV_CHARGER_CMD, ID_DC12_COMM, ID_DC12_STAT,
+    ID_TEMP_FRAME
 ]}
-EMULATOR_INTERVAL = 0.1
+
+# Refresh intervals for different frame types (in seconds)
+EMULATOR_INTERVALS = {
+    0x600: 0.05,  # 50ms for CCU status
+    0x720: 0.05,  # 50ms for motor status
+    # Battery frames and temperature frame use 100ms (0.1 seconds)
+    0x400: 0.1, 0x401: 0.1, 0x402: 0.1, 0x403: 0.1, 0x404: 0.1, 0x405: 0.1, 0x406: 0.1,
+    0x420: 0.1, 0x421: 0.1, 0x422: 0.1, 0x423: 0.1, 0x424: 0.1, 0x425: 0.1, 0x426: 0.1,
+    0x440: 0.1, 0x441: 0.1, 0x442: 0.1, 0x443: 0.1, 0x444: 0.1, 0x445: 0.1, 0x446: 0.1,
+    ID_TEMP_FRAME: 0.1,  # 100ms for temperature frame (0x111)
+}
+
+# Default interval for other frames (100ms)
+EMULATOR_INTERVAL_DEFAULT = 0.1
+
 EMULATOR_BAT1_ENABLED = False
+
+
+def get_emulator_interval(can_id):
+    """Get the appropriate refresh interval for a CAN ID"""
+    return EMULATOR_INTERVALS.get(can_id, EMULATOR_INTERVAL_DEFAULT)
 
 
 class CANMonitor(QMainWindow):
@@ -54,8 +79,11 @@ class CANMonitor(QMainWindow):
         super().__init__()
         self.setWindowTitle("VCU CAN Tool – Full Battery + 1806E5F4 16-bit EOC")
         self.resize(3000, 1600)
-        self.bus = None
-        self.bus_connected = False
+        self.bus1 = None
+        self.bus2 = None
+        self.bus1_connected = False
+        self.bus2_connected = False
+        self.active_can = 1  # 1 or 2
         self.tables = {}
         self.battery_tabs = {}
         self.lock = threading.Lock()
@@ -73,7 +101,8 @@ class CANMonitor(QMainWindow):
 
         all_ids = [ID_727,ID_587,ID_107,ID_607,ID_CMD_BMS,ID_PDU_STATUS,ID_HMI_STATUS,
                    ID_PCU_COOL,ID_PCU_MOTOR,ID_PCU_POWER,ID_CCU_STATUS,ID_ZCU_PUMP,
-                   ID_HV_CHARGER_STATUS, ID_HV_CHARGER_CMD, ID_DC12_COMM, ID_DC12_STAT]
+                   ID_HV_CHARGER_STATUS, ID_HV_CHARGER_CMD, ID_DC12_COMM, ID_DC12_STAT,
+                   ID_TEMP_FRAME]
         all_ids += BAT1_FRAMES + BAT2_FRAMES + BAT3_FRAMES
 
         self.signals = {id_: {} for id_ in set(all_ids)}
@@ -95,13 +124,29 @@ class CANMonitor(QMainWindow):
         layout.setSpacing(8)
 
         top = QHBoxLayout()
-        self.connect_btn = QPushButton("Connect CAN")
-        self.connect_btn.setFixedHeight(36)
-        self.connect_btn.clicked.connect(self.toggle_can)
-        top.addWidget(self.connect_btn)
-        self.status_label = QLabel("DISCONNECTED")
-        self.status_label.setStyleSheet("color:#d32f2f; font-weight:bold;")
-        top.addWidget(self.status_label)
+
+        # CAN1 controls
+        can1_layout = QVBoxLayout()
+        self.connect_btn1 = QPushButton("Connect CAN1")
+        self.connect_btn1.setFixedHeight(36)
+        self.connect_btn1.clicked.connect(self.toggle_can1)
+        can1_layout.addWidget(self.connect_btn1)
+        self.status_label1 = QLabel("CAN1: DISCONNECTED")
+        self.status_label1.setStyleSheet("color:#d32f2f; font-weight:bold;")
+        can1_layout.addWidget(self.status_label1)
+        top.addLayout(can1_layout)
+
+        # CAN2 controls
+        can2_layout = QVBoxLayout()
+        self.connect_btn2 = QPushButton("Connect CAN2")
+        self.connect_btn2.setFixedHeight(36)
+        self.connect_btn2.clicked.connect(self.toggle_can2)
+        can2_layout.addWidget(self.connect_btn2)
+        self.status_label2 = QLabel("CAN2: DISCONNECTED")
+        self.status_label2.setStyleSheet("color:#d32f2f; font-weight:bold;")
+        can2_layout.addWidget(self.status_label2)
+        top.addLayout(can2_layout)
+
         top.addStretch()
         layout.addLayout(top)
 
@@ -187,6 +232,7 @@ class CANMonitor(QMainWindow):
         )
 
         self.create_tab(ID_HMI_STATUS, "0x740 – HMI", "HMI Stat", ["Signal","Value","Unit","TS"])
+        self.create_tab(ID_TEMP_FRAME, "0x111 – Temp Frame", "Temperature Frame (HMI)", ["Signal","Value","Unit","TS"])
         self.create_battery_tab_with_emulator("Battery 1", 1, BAT1_FRAMES)
         self.create_battery_tab("Battery 2", 2, BAT2_FRAMES)
         self.create_battery_tab("Battery 3", 3, BAT3_FRAMES)
@@ -301,13 +347,29 @@ class CANMonitor(QMainWindow):
             "Charger_Temperature": {"d": f"{temperature:+}", "u": "°C"},
         }
 
+    def decode_temperature_frame(self, data):
+        if len(data) < 8: return {}
+        b = data
+        # Each temperature is 1 bit per °C - 40 offset
+        return {
+            "SCU1_Fresh_Water_Outboard_Temp": {"d": f"{b[0] - 40:+.0f}", "u": "°C"},
+            "SCU2_Fresh_Water_Battery_Temp": {"d": f"{b[1] - 40:+.0f}", "u": "°C"},
+            "SCU3_Glycol_Water_Battery_Temp": {"d": f"{b[2] - 40:+.0f}", "u": "°C"},
+            "Rotor_Outboard_Temp": {"d": f"{b[3] - 40:+.0f}", "u": "°C"},
+            "Inverter_Outboard_Temp": {"d": f"{b[4] - 40:+.0f}", "u": "°C"},
+            "Motor_Outboard_Temp": {"d": f"{b[5] - 40:+.0f}", "u": "°C"},
+            "Charger_DCDC_Temp": {"d": f"{b[6] - 40:+.0f}", "u": "°C"},
+            "Battery_Cell_Temp": {"d": f"{b[7] - 40:+.0f}", "u": "°C"},
+        }
+
     HEX_TO_DBC_ID = {
         0x727:1831, 0x587:1415, 0x107:263, 0x607:1543, 0x4F0:1264, 0x580:1408, 0x740:1856,
         0x722:1826, 0x720:1824, 0x724:1828, 0x600:1536, 0x72E:1838,
         0x400:1024, 0x401:1025, 0x403:1027, 0x405:1029, 0x406:1030,
         0x420:1056, 0x421:1057, 0x423:1059, 0x425:1061, 0x426:1062,
         0x440:1088, 0x441:1089, 0x443:1091, 0x445:1093, 0x446:1094,
-        ID_HV_CHARGER_STATUS: None, ID_HV_CHARGER_CMD: None, ID_DC12_COMM: None, ID_DC12_STAT: None
+        ID_HV_CHARGER_STATUS: None, ID_HV_CHARGER_CMD: None, ID_DC12_COMM: None, ID_DC12_STAT: None,
+        ID_TEMP_FRAME: None
     }
 
     # === GUI CREATION ===
@@ -470,31 +532,55 @@ class CANMonitor(QMainWindow):
     def toggle_emulator(self, can_id, btn, input_field):
         EMULATOR_STATES[can_id] = not EMULATOR_STATES[can_id]
         if EMULATOR_STATES[can_id]:
-            btn.setText(f"ON – {hex(can_id)} @10Hz")
+            interval = get_emulator_interval(can_id)
+            freq = int(1.0 / interval) if interval > 0 else 0
+            btn.setText(f"ON – {hex(can_id)} @{freq}Hz")
             btn.setStyleSheet("background:#d32f2f;color:white;")
-            self.start_timer(lambda: self.send_raw(can_id, input_field.text()))
+            self.start_timer(can_id, lambda: self.send_raw(can_id, input_field.text()), interval)
         else:
             btn.setText("OFF to Click to Enable")
             btn.setStyleSheet("background:#555;color:white;")
+            self.stop_timer(can_id)
 
     def toggle_bat1(self):
         global EMULATOR_BAT1_ENABLED
         EMULATOR_BAT1_ENABLED = not EMULATOR_BAT1_ENABLED
         if EMULATOR_BAT1_ENABLED:
-            self.bat_btn.setText("ON – Cycling 400-406")
+            self.bat_btn.setText("ON – Cycling 400-406 @10Hz")
             self.bat_btn.setStyleSheet("background:#2E7D32;color:white;")
             self.bat1_cycle_index = 0
-            self.start_timer(self.send_bat_cycle)
+            self.start_timer("battery", self.send_bat_cycle, 0.1)  # 100ms interval for battery frames
         else:
             self.bat_btn.setText("OFF to Click to Enable Cycle")
             self.bat_btn.setStyleSheet("background:#388E3C;color:white;")
+            self.stop_timer("battery")
 
-    def start_timer(self, callback):
-        if hasattr(self, "emu_timer"):
-            self.emu_timer.stop()
-        self.emu_timer = QTimer()
-        self.emu_timer.timeout.connect(callback)
-        self.emu_timer.start(int(EMULATOR_INTERVAL * 1000))
+    def start_timer(self, can_id, callback, interval_seconds=None):
+        # Initialize emu_timers dictionary if it doesn't exist
+        if not hasattr(self, "emu_timers"):
+            self.emu_timers = {}
+
+        # Stop existing timer for this CAN ID if it exists
+        if can_id in self.emu_timers:
+            self.emu_timers[can_id].stop()
+
+        # Create new timer for this CAN ID
+        self.emu_timers[can_id] = QTimer()
+        self.emu_timers[can_id].timeout.connect(callback)
+        if interval_seconds is None:
+            interval_seconds = EMULATOR_INTERVAL_DEFAULT
+        self.emu_timers[can_id].start(int(interval_seconds * 1000))
+
+    def stop_timer(self, can_id):
+        if hasattr(self, "emu_timers") and can_id in self.emu_timers:
+            self.emu_timers[can_id].stop()
+            del self.emu_timers[can_id]
+
+    def stop_all_timers(self):
+        if hasattr(self, "emu_timers"):
+            for timer in self.emu_timers.values():
+                timer.stop()
+            self.emu_timers.clear()
 
     def send_bat_cycle(self):
         cid = BAT1_EMULATOR_IDS[self.bat1_cycle_index]
@@ -502,23 +588,34 @@ class CANMonitor(QMainWindow):
         self.bat1_cycle_index = (self.bat1_cycle_index + 1) % len(BAT1_EMULATOR_IDS)
 
     def send_raw(self, can_id, text):
-        if not self.bus_connected: return
+        # Send to all connected CAN buses
+        buses_to_send = []
+        if self.bus1_connected:
+            buses_to_send.append((self.bus1, 1))
+        if self.bus2_connected:
+            buses_to_send.append((self.bus2, 2))
+
+        if not buses_to_send:
+            return
+
         clean = ''.join(c for c in text.upper() if c in '0123456789ABCDEF ')
         clean = clean.replace(" ", "")
         if len(clean) != 16: return
-        try:
-            data = bytes.fromhex(clean)
-            is_extended = (can_id > 0x7FF)
-            msg = can.Message(arbitration_id=can_id, data=data, is_extended_id=is_extended)
-            self.bus.send(msg)
-            self.process_message_for_gui(msg)
-        except Exception as e:
-            print("Send failed:", e)
+
+        for bus, bus_num in buses_to_send:
+            try:
+                data = bytes.fromhex(clean)
+                is_extended = (can_id > 0x7FF)
+                msg = can.Message(arbitration_id=can_id, data=data, is_extended_id=is_extended)
+                bus.send(msg)
+                self.process_message_for_gui(msg, bus_num)
+            except Exception as e:
+                print(f"Send failed on CAN{bus_num}:", e)
 
     # === Message Processing ===
-    def process_message_for_gui(self, msg):
+    def process_message_for_gui(self, msg, can_bus=1):
         with self.lock:
-            self.raw_log_lines.append(f"0x{msg.arbitration_id:08X} | {msg.data.hex(' ').upper()}")
+            self.raw_log_lines.append(f"CAN{can_bus} | 0x{msg.arbitration_id:08X} | {msg.data.hex(' ').upper()}")
             if len(self.raw_log_lines) > 200:
                 self.raw_log_lines.pop(0)
 
@@ -543,6 +640,8 @@ class CANMonitor(QMainWindow):
             decoded_signals = self.decode_dc12_comm(msg.data)
         elif fid == ID_DC12_STAT:
             decoded_signals = self.decode_dc12_stat(msg.data)
+        elif fid == ID_TEMP_FRAME:
+            decoded_signals = self.decode_temperature_frame(msg.data)
         elif fid in [0x402,0x422,0x442,0x404,0x424,0x444,0x405,0x425,0x445,0x406,0x426,0x446]:
             decoded_signals = self.decode_battery_frame(fid, msg.data)
         else:
@@ -572,16 +671,29 @@ class CANMonitor(QMainWindow):
                     for name, val in decoded_signals.items()
                 })
 
-    def can_listener(self):
-        while self.bus_connected:
+    def can_listener1(self):
+        while self.bus1_connected:
             try:
-                msg = self.bus.recv(timeout=0.1)
+                msg = self.bus1.recv(timeout=0.1)
                 if msg:
                     if getattr(msg, 'is_error_frame', False):
                         with self.lock:
                             self.error_count += 1
                     else:
-                        self.process_message_for_gui(msg)
+                        self.process_message_for_gui(msg, can_bus=1)
+            except:
+                pass
+
+    def can_listener2(self):
+        while self.bus2_connected:
+            try:
+                msg = self.bus2.recv(timeout=0.1)
+                if msg:
+                    if getattr(msg, 'is_error_frame', False):
+                        with self.lock:
+                            self.error_count += 1
+                    else:
+                        self.process_message_for_gui(msg, can_bus=2)
             except:
                 pass
 
@@ -624,53 +736,107 @@ class CANMonitor(QMainWindow):
         for l in lines:
             self.raw_log.append(l)
 
-        self.status_label.setText("CONNECTED" if self.bus_connected and self.error_count == 0 else f"NOISE: {self.error_count}")
-        self.status_label.setStyleSheet("color:green;" if self.error_count == 0 else "color:orange;")
+        # Update CAN1 status
+        can1_status = "CONNECTED" if self.bus1_connected and self.error_count == 0 else f"NOISE: {self.error_count}"
+        self.status_label1.setText(f"CAN1: {can1_status}")
+        self.status_label1.setStyleSheet("color:green;" if self.bus1_connected and self.error_count == 0 else "color:orange;" if self.bus1_connected else "color:#d32f2f;")
 
-    def toggle_can(self):
-        if self.bus_connected:
-            self.disconnect_can()
+        # Update CAN2 status
+        can2_status = "CONNECTED" if self.bus2_connected and self.error_count == 0 else f"NOISE: {self.error_count}"
+        self.status_label2.setText(f"CAN2: {can2_status}")
+        self.status_label2.setStyleSheet("color:green;" if self.bus2_connected and self.error_count == 0 else "color:orange;" if self.bus2_connected else "color:#d32f2f;")
+
+    def toggle_can1(self):
+        if self.bus1_connected:
+            self.disconnect_can1()
         else:
-            self.connect_can()
+            self.connect_can1()
 
-    def connect_can(self):
+    def toggle_can2(self):
+        if self.bus2_connected:
+            self.disconnect_can2()
+        else:
+            self.connect_can2()
+
+    def connect_can1(self):
         try:
-            self.bus = can.interface.Bus(channel=CHANNEL, bustype=BUSTYPE, bitrate=BITRATE)
-            self.bus_connected = True
-            self.connect_btn.setText("Disconnect CAN")
-            self.connect_btn.setStyleSheet("background:#c62828;color:white;")
-            self.status_label.setText("CONNECTED")
-            self.status_label.setStyleSheet("color:green;font-weight:bold;")
-            threading.Thread(target=self.can_listener, daemon=True).start()
+            self.bus1 = can.interface.Bus(channel=CHANNEL1, bustype=BUSTYPE1, bitrate=BITRATE)
+            self.bus1_connected = True
+            self.connect_btn1.setText("Disconnect CAN1")
+            self.connect_btn1.setStyleSheet("background:#c62828;color:white;")
+            self.status_label1.setText("CAN1: CONNECTED")
+            self.status_label1.setStyleSheet("color:green;font-weight:bold;")
+            threading.Thread(target=self.can_listener1, daemon=True).start()
         except Exception as e:
-            self.status_label.setText(f"ERROR: {str(e)[:50]}")
-            print("Connect failed:", e)
+            self.status_label1.setText(f"CAN1: ERROR: {str(e)[:30]}")
+            print("CAN1 Connect failed:", e)
 
-    def disconnect_can(self):
+    def connect_can2(self):
+        try:
+            self.bus2 = can.interface.Bus(channel=CHANNEL2, bustype=BUSTYPE2, bitrate=BITRATE)
+            self.bus2_connected = True
+            self.connect_btn2.setText("Disconnect CAN2")
+            self.connect_btn2.setStyleSheet("background:#c62828;color:white;")
+            self.status_label2.setText("CAN2: CONNECTED")
+            self.status_label2.setStyleSheet("color:green;font-weight:bold;")
+            threading.Thread(target=self.can_listener2, daemon=True).start()
+        except Exception as e:
+            self.status_label2.setText(f"CAN2: ERROR: {str(e)[:30]}")
+            print("CAN2 Connect failed:", e)
+
+    def disconnect_can1(self):
         global EMULATOR_BAT1_ENABLED
         EMULATOR_BAT1_ENABLED = False
         for cid in EMULATOR_STATES:
             EMULATOR_STATES[cid] = False
-        if hasattr(self, "emu_timer"):
-            self.emu_timer.stop()
-        if self.bus:
+        self.stop_all_timers()
+        if self.bus1:
             try:
-                self.bus.shutdown()
+                self.bus1.shutdown()
             except:
                 pass
-        self.bus = None
-        self.bus_connected = False
-        self.connect_btn.setText("Connect CAN")
-        self.connect_btn.setStyleSheet("")
-        self.status_label.setText("DISCONNECTED")
-        self.status_label.setStyleSheet("color:#d32f2f;")
-        with self.lock:
-            for d in self.signals.values():
-                d.clear()
-            self.raw_log_lines.clear()
+        self.bus1 = None
+        self.bus1_connected = False
+        self.connect_btn1.setText("Connect CAN1")
+        self.connect_btn1.setStyleSheet("")
+        self.status_label1.setText("CAN1: DISCONNECTED")
+        self.status_label1.setStyleSheet("color:#d32f2f;")
+        # Only clear data if both CANs are disconnected
+        if not self.bus2_connected:
+            with self.lock:
+                for d in self.signals.values():
+                    d.clear()
+                self.raw_log_lines.clear()
+
+    def disconnect_can2(self):
+        global EMULATOR_BAT1_ENABLED
+        EMULATOR_BAT1_ENABLED = False
+        for cid in EMULATOR_STATES:
+            EMULATOR_STATES[cid] = False
+        self.stop_all_timers()
+        if self.bus2:
+            try:
+                self.bus2.shutdown()
+            except:
+                pass
+        self.bus2 = None
+        self.bus2_connected = False
+        self.connect_btn2.setText("Connect CAN2")
+        self.connect_btn2.setStyleSheet("")
+        self.status_label2.setText("CAN2: DISCONNECTED")
+        self.status_label2.setStyleSheet("color:#d32f2f;")
+        # Only clear data if both CANs are disconnected
+        if not self.bus1_connected:
+            with self.lock:
+                for d in self.signals.values():
+                    d.clear()
+                self.raw_log_lines.clear()
 
     def closeEvent(self, event):
-        self.disconnect_can()
+        if self.bus1_connected:
+            self.disconnect_can1()
+        if self.bus2_connected:
+            self.disconnect_can2()
         event.accept()
 
 
