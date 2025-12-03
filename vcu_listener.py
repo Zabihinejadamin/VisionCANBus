@@ -19,6 +19,29 @@ BUSTYPE1 = 'pcan'
 CHANNEL2 = 'PCAN_USBBUS2'
 BUSTYPE2 = 'pcan'
 
+# Alternative CAN2 channels to try if PCAN_USBBUS2 doesn't work
+# CHANNEL2 = 'PCAN_USBBUS3'  # Try this if BUS2 doesn't work
+# CHANNEL2 = 'PCAN_USBBUS4'  # Or this
+# CHANNEL2 = 'PCAN_USBBUS5'  # Or this
+
+def list_pcan_channels():
+    """List available PCAN channels"""
+    import can
+    try:
+        # Try to detect available PCAN channels
+        channels = []
+        for i in range(1, 10):  # Try BUS1 through BUS9
+            try:
+                channel_name = f'PCAN_USBBUS{i}'
+                bus = can.interface.Bus(channel=channel_name, bustype='pcan', bitrate=250000)
+                bus.shutdown()
+                channels.append(channel_name)
+            except:
+                pass
+        return channels
+    except:
+        return []
+
 # === CAN IDs ===
 ID_727 = 0x727
 ID_587 = 0x587
@@ -37,6 +60,7 @@ ID_HV_CHARGER_CMD = 0x1806E5F4
 ID_DC12_COMM = 0x1800F5E5
 ID_DC12_STAT = 0x1800E5F5
 ID_TEMP_FRAME = 0x111
+ID_VOLT_FRAME = 0x112
 
 # ALL BATTERY FRAMES (now complete)
 BAT1_FRAMES = [0x400, 0x401, 0x402, 0x403, 0x404, 0x405, 0x406]
@@ -56,11 +80,13 @@ EMULATOR_STATES = {k: False for k in [
 EMULATOR_INTERVALS = {
     0x600: 0.05,  # 50ms for CCU status
     0x720: 0.05,  # 50ms for motor status
+    0x722: 0.2,   # 200ms for PCU cooling status
     # Battery frames and temperature frame use 100ms (0.1 seconds)
     0x400: 0.1, 0x401: 0.1, 0x402: 0.1, 0x403: 0.1, 0x404: 0.1, 0x405: 0.1, 0x406: 0.1,
     0x420: 0.1, 0x421: 0.1, 0x422: 0.1, 0x423: 0.1, 0x424: 0.1, 0x425: 0.1, 0x426: 0.1,
     0x440: 0.1, 0x441: 0.1, 0x442: 0.1, 0x443: 0.1, 0x444: 0.1, 0x445: 0.1, 0x446: 0.1,
     ID_TEMP_FRAME: 0.1,  # 100ms for temperature frame (0x111)
+    ID_VOLT_FRAME: 0.5,  # 500ms for voltage frame (0x112)
 }
 
 # Default interval for other frames (100ms)
@@ -102,7 +128,7 @@ class CANMonitor(QMainWindow):
         all_ids = [ID_727,ID_587,ID_107,ID_607,ID_CMD_BMS,ID_PDU_STATUS,ID_HMI_STATUS,
                    ID_PCU_COOL,ID_PCU_MOTOR,ID_PCU_POWER,ID_CCU_STATUS,ID_ZCU_PUMP,
                    ID_HV_CHARGER_STATUS, ID_HV_CHARGER_CMD, ID_DC12_COMM, ID_DC12_STAT,
-                   ID_TEMP_FRAME]
+                   ID_TEMP_FRAME, ID_VOLT_FRAME]
         all_ids += BAT1_FRAMES + BAT2_FRAMES + BAT3_FRAMES
 
         self.signals = {id_: {} for id_ in set(all_ids)}
@@ -110,6 +136,7 @@ class CANMonitor(QMainWindow):
         self.hex_labels = {}
         self.first_fill = {k: True for k in self.signals}
         self.first_fill.update({f"BT{i}": True for i in [1,2,3]})
+        self.first_fill["HMI"] = True
 
         self.init_ui()
         self.gui_timer = QTimer()
@@ -142,6 +169,11 @@ class CANMonitor(QMainWindow):
         self.connect_btn2.setFixedHeight(36)
         self.connect_btn2.clicked.connect(self.toggle_can2)
         can2_layout.addWidget(self.connect_btn2)
+
+        # Add test button for CAN2
+        self.test_btn2 = QPushButton("Test CAN2")
+        self.test_btn2.clicked.connect(self.test_can2)
+        can2_layout.addWidget(self.test_btn2)
         self.status_label2 = QLabel("CAN2: DISCONNECTED")
         self.status_label2.setStyleSheet("color:#d32f2f; font-weight:bold;")
         can2_layout.addWidget(self.status_label2)
@@ -172,8 +204,8 @@ class CANMonitor(QMainWindow):
         self.create_emulator_tab(0x580, "0x580 – PDU Stat", "PDU Relays", "99 00 00 99 04 00 00 F3",
                                  [("All OFF","00 00 00 00 00 00 00 00"), ("Main+Pre","03 00 00 00 00 00 00 00"), ("All ON","FF FF FF FF FF FF FF FF")])
         self.create_emulator_tab(0x600, "0x600 – CCU", "CCU Stat", "3A 39 50 54 8D 00 3C 00")
-        self.create_emulator_tab(0x720, "0x720 – Motor", "Motor Stat", "07 00 00 00 00 00 84 00")
-        self.create_emulator_tab(0x722, "0x722 – Cooling", "PCU Cooling", "39 38 00 3C 39 3B 28 39")
+        self.create_emulator_tab(0x720, "0x720 – Motor", "Motor Stat", "f0 04 9e 11 36 15 08 01")
+        self.create_emulator_tab(0x722, "0x722 – Cooling", "PCU Cooling", "4a 5e 30 64 43 4b 5e 49")
         self.create_emulator_tab(0x724, "0x724 – Power", "PCU Power", "E4 8A 28 1D E5 1A 3A 5E")
         self.create_emulator_tab(0x72E, "0x72E – ZCU Pump", "ZCU Pump Stat", "28 00 00 00 00 3C 08 00",
                                  [("OFF","00 00 00 00 00 00 00 00"), ("50%","01 32 00 00 00 00 00 00"), ("100%","01 64 00 00 00 00 00 00")])
@@ -232,7 +264,7 @@ class CANMonitor(QMainWindow):
         )
 
         self.create_tab(ID_HMI_STATUS, "0x740 – HMI", "HMI Stat", ["Signal","Value","Unit","TS"])
-        self.create_tab(ID_TEMP_FRAME, "0x111 – Temp Frame", "Temperature Frame (HMI)", ["Signal","Value","Unit","TS"])
+        self.create_hmi_tab()
         self.create_battery_tab_with_emulator("Battery 1", 1, BAT1_FRAMES)
         self.create_battery_tab("Battery 2", 2, BAT2_FRAMES)
         self.create_battery_tab("Battery 3", 3, BAT3_FRAMES)
@@ -362,6 +394,26 @@ class CANMonitor(QMainWindow):
             "Battery_Cell_Temp": {"d": f"{b[7] - 40:+.0f}", "u": "°C"},
         }
 
+    def decode_voltage_frame(self, data):
+        if len(data) < 8: return {}
+        b = data
+        # HV voltages are 16-bit little-endian, 1 bit per 0.1V
+        # Low voltages are 8-bit, 1 bit per 0.1V
+        hv_batt = ((b[1] << 8) | b[0]) * 0.1
+        hv_mot = ((b[3] << 8) | b[2]) * 0.1
+        dcdc = b[4] * 0.1
+        aux1 = b[5] * 0.1
+        aux2 = b[6] * 0.1
+        lvbat = b[7] * 0.1
+        return {
+            "HV_BATT": {"d": f"{hv_batt:.1f}", "u": "V"},
+            "HV_MOT": {"d": f"{hv_mot:.1f}", "u": "V"},
+            "DCDC": {"d": f"{dcdc:.1f}", "u": "V"},
+            "AUX1": {"d": f"{aux1:.1f}", "u": "V"},
+            "AUX2": {"d": f"{aux2:.1f}", "u": "V"},
+            "LVBAT": {"d": f"{lvbat:.1f}", "u": "V"},
+        }
+
     HEX_TO_DBC_ID = {
         0x727:1831, 0x587:1415, 0x107:263, 0x607:1543, 0x4F0:1264, 0x580:1408, 0x740:1856,
         0x722:1826, 0x720:1824, 0x724:1828, 0x600:1536, 0x72E:1838,
@@ -391,6 +443,28 @@ class CANMonitor(QMainWindow):
         self.tables[fid] = table
         l.addWidget(table)
         self.tabs.addTab(w, name)
+
+    def create_hmi_tab(self):
+        w = QWidget()
+        l = QVBoxLayout(w)
+        l.addWidget(QLabel("HMI Frames (Temperature & Voltage)"))
+
+        # Add hex displays for both frames
+        hex_layout = QHBoxLayout()
+        for fid in [ID_TEMP_FRAME, ID_VOLT_FRAME]:
+            hex_label = QLabel(f"0x{fid:03X}: {self.current_hex.get(fid, '00 00 00 00 00 00 00 00')}")
+            hex_label.setStyleSheet("font-family: Consolas; font-size: 10px; color: #666; padding: 1px; margin-right: 10px;")
+            self.hex_labels[fid] = hex_label
+            hex_layout.addWidget(hex_label)
+        l.addLayout(hex_layout)
+
+        table = QTableWidget()
+        table.setColumnCount(4)
+        table.setHorizontalHeaderLabels(["Signal","Value","Unit","TS"])
+        table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        self.hmi_tab = table
+        l.addWidget(table)
+        self.tabs.addTab(w, "0x111/0x112 – HMI Frames")
 
     def create_emulator_tab(self, can_id, tab_name, title, default_payload, presets=None):
         if presets is None: presets = []
@@ -642,6 +716,8 @@ class CANMonitor(QMainWindow):
             decoded_signals = self.decode_dc12_stat(msg.data)
         elif fid == ID_TEMP_FRAME:
             decoded_signals = self.decode_temperature_frame(msg.data)
+        elif fid == ID_VOLT_FRAME:
+            decoded_signals = self.decode_voltage_frame(msg.data)
         elif fid in [0x402,0x422,0x442,0x404,0x424,0x444,0x405,0x425,0x445,0x406,0x426,0x446]:
             decoded_signals = self.decode_battery_frame(fid, msg.data)
         else:
@@ -693,8 +769,10 @@ class CANMonitor(QMainWindow):
                         with self.lock:
                             self.error_count += 1
                     else:
+                        print(f"CAN2 received: 0x{msg.arbitration_id:03X}")  # Debug print
                         self.process_message_for_gui(msg, can_bus=2)
-            except:
+            except Exception as e:
+                print(f"CAN2 listener error: {e}")
                 pass
 
     def update_gui(self):
@@ -732,6 +810,22 @@ class CANMonitor(QMainWindow):
                 table.resizeColumnsToContents()
                 self.first_fill[f"BT{idx}"] = False
 
+        # HMI tab (combined temperature and voltage frames)
+        hmi_frames = [ID_TEMP_FRAME, ID_VOLT_FRAME]
+        table = self.hmi_tab
+        all_sig = [item for fid in hmi_frames for item in self.signals.get(fid, {}).items()]
+        table.setRowCount(len(all_sig))
+        for r, (name, d) in enumerate(all_sig):
+            for c, val in enumerate([name, d.get("d",""), d.get("u",""), f"{d.get('t',0):.3f}"]):
+                item = table.item(r, c)
+                if not item:
+                    table.setItem(r, c, QTableWidgetItem(val))
+                else:
+                    item.setText(val)
+        if self.first_fill.get("HMI", False):
+            table.resizeColumnsToContents()
+            self.first_fill["HMI"] = False
+
         self.raw_log.clear()
         for l in lines:
             self.raw_log.append(l)
@@ -758,6 +852,31 @@ class CANMonitor(QMainWindow):
         else:
             self.connect_can2()
 
+    def test_can2(self):
+        """Send a test message on CAN2 and see if we receive it back"""
+        if not self.bus2_connected:
+            print("CAN2 not connected")
+            return
+
+        try:
+            # Send a test message
+            test_msg = can.Message(arbitration_id=0x123, data=[0xAA, 0xBB, 0xCC, 0xDD], is_extended_id=False)
+            self.bus2.send(test_msg)
+            print("Sent test message on CAN2: 0x123 AA BB CC DD")
+
+            # Try to receive it back (if loopback is enabled or there's another device)
+            try:
+                recv_msg = self.bus2.recv(timeout=1.0)
+                if recv_msg:
+                    print(f"Received message on CAN2: 0x{recv_msg.arbitration_id:03X} {recv_msg.data.hex()}")
+                else:
+                    print("No message received on CAN2 (normal if no loopback or other devices)")
+            except:
+                print("No message received on CAN2")
+
+        except Exception as e:
+            print(f"CAN2 test failed: {e}")
+
     def connect_can1(self):
         try:
             self.bus1 = can.interface.Bus(channel=CHANNEL1, bustype=BUSTYPE1, bitrate=BITRATE)
@@ -773,16 +892,41 @@ class CANMonitor(QMainWindow):
 
     def connect_can2(self):
         try:
+            print(f"Connecting to CAN2: channel={CHANNEL2}, bustype={BUSTYPE2}")  # Debug print
             self.bus2 = can.interface.Bus(channel=CHANNEL2, bustype=BUSTYPE2, bitrate=BITRATE)
             self.bus2_connected = True
             self.connect_btn2.setText("Disconnect CAN2")
             self.connect_btn2.setStyleSheet("background:#c62828;color:white;")
             self.status_label2.setText("CAN2: CONNECTED")
             self.status_label2.setStyleSheet("color:green;font-weight:bold;")
+            print("CAN2 connected successfully, starting listener thread")  # Debug print
             threading.Thread(target=self.can_listener2, daemon=True).start()
         except Exception as e:
+            # Try alternative channels
+            alt_channels = ['PCAN_USBBUS3', 'PCAN_USBBUS4', 'PCAN_USBBUS5', 'PCAN_USBBUS6']
+            for alt_channel in alt_channels:
+                try:
+                    print(f"Trying alternative CAN2 channel: {alt_channel}")
+                    self.bus2 = can.interface.Bus(channel=alt_channel, bustype=BUSTYPE2, bitrate=BITRATE)
+                    self.bus2_connected = True
+                    self.connect_btn2.setText("Disconnect CAN2")
+                    self.connect_btn2.setStyleSheet("background:#c62828;color:white;")
+                    self.status_label2.setText(f"CAN2: CONNECTED ({alt_channel})")
+                    self.status_label2.setStyleSheet("color:green;font-weight:bold;")
+                    print(f"CAN2 connected successfully to {alt_channel}, starting listener thread")
+                    threading.Thread(target=self.can_listener2, daemon=True).start()
+                    return
+                except:
+                    continue
+
             self.status_label2.setText(f"CAN2: ERROR: {str(e)[:30]}")
             print("CAN2 Connect failed:", e)
+            print("Available PCAN channels to try manually:")
+            available = list_pcan_channels()
+            if available:
+                print("Available:", available)
+            else:
+                print("No PCAN channels detected")
 
     def disconnect_can1(self):
         global EMULATOR_BAT1_ENABLED
