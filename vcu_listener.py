@@ -668,7 +668,7 @@ class CANMonitor(QMainWindow):
         table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         self.hmi_tab = table
         l.addWidget(table)
-        self.tabs.addTab(w, "HMI CAN2 (111/112/113/114/115)")
+        self.tabs.addTab(w, "HMI CAN2")
 
     def create_emulator_tab(self, can_id, tab_name, title, default_payload, presets=None):
         if presets is None: presets = []
@@ -1199,5 +1199,5 @@ class CANMonitor(QMainWindow):
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     win = CANMonitor()
-    win.show()
+    win.showMaximized()
     sys.exit(app.exec_())
