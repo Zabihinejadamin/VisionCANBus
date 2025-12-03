@@ -61,6 +61,9 @@ ID_DC12_COMM = 0x1800F5E5
 ID_DC12_STAT = 0x1800E5F5
 ID_TEMP_FRAME = 0x111
 ID_VOLT_FRAME = 0x112
+ID_CURRENT_FRAME = 0x113
+ID_DRIVE_FRAME = 0x114
+ID_SPDTQ_FRAME = 0x115
 
 # ALL BATTERY FRAMES (now complete)
 BAT1_FRAMES = [0x400, 0x401, 0x402, 0x403, 0x404, 0x405, 0x406]
@@ -87,6 +90,9 @@ EMULATOR_INTERVALS = {
     0x440: 0.1, 0x441: 0.1, 0x442: 0.1, 0x443: 0.1, 0x444: 0.1, 0x445: 0.1, 0x446: 0.1,
     ID_TEMP_FRAME: 0.1,  # 100ms for temperature frame (0x111)
     ID_VOLT_FRAME: 0.5,  # 500ms for voltage frame (0x112)
+    ID_CURRENT_FRAME: 0.5,  # 500ms for current frame (0x113)
+    ID_DRIVE_FRAME: 0.5,  # 500ms for drive frame (0x114)
+    ID_SPDTQ_FRAME: 0.5,  # 500ms for speed/torque frame (0x115)
 }
 
 # Default interval for other frames (100ms)
@@ -128,7 +134,7 @@ class CANMonitor(QMainWindow):
         all_ids = [ID_727,ID_587,ID_107,ID_607,ID_CMD_BMS,ID_PDU_STATUS,ID_HMI_STATUS,
                    ID_PCU_COOL,ID_PCU_MOTOR,ID_PCU_POWER,ID_CCU_STATUS,ID_ZCU_PUMP,
                    ID_HV_CHARGER_STATUS, ID_HV_CHARGER_CMD, ID_DC12_COMM, ID_DC12_STAT,
-                   ID_TEMP_FRAME, ID_VOLT_FRAME]
+                   ID_TEMP_FRAME, ID_VOLT_FRAME, ID_CURRENT_FRAME, ID_DRIVE_FRAME, ID_SPDTQ_FRAME]
         all_ids += BAT1_FRAMES + BAT2_FRAMES + BAT3_FRAMES
 
         self.signals = {id_: {} for id_ in set(all_ids)}
@@ -206,7 +212,7 @@ class CANMonitor(QMainWindow):
         self.create_emulator_tab(0x600, "0x600 – CCU", "CCU Stat", "3A 39 50 54 8D 00 3C 00")
         self.create_emulator_tab(0x720, "0x720 – Motor", "Motor Stat", "f0 04 9e 11 36 15 08 01")
         self.create_emulator_tab(0x722, "0x722 – Cooling", "PCU Cooling", "4a 5e 30 64 43 4b 5e 49")
-        self.create_emulator_tab(0x724, "0x724 – Power", "PCU Power", "E4 8A 28 1D E5 1A 3A 5E")
+        self.create_emulator_tab(0x724, "0x724 – Power", "PCU Power", "E4 8A 28 1D E5 1A 00 00")
         self.create_emulator_tab(0x72E, "0x72E – ZCU Pump", "ZCU Pump Stat", "28 00 00 00 00 3C 08 00",
                                  [("OFF","00 00 00 00 00 00 00 00"), ("50%","01 32 00 00 00 00 00 00"), ("100%","01 64 00 00 00 00 00 00")])
 
@@ -414,9 +420,207 @@ class CANMonitor(QMainWindow):
             "LVBAT": {"d": f"{lvbat:.1f}", "u": "V"},
         }
 
+    def decode_current_frame(self, data):
+        if len(data) < 8: return {}
+        b = data
+        # HV currents are 16-bit little-endian signed, 1 bit per 0.1A
+        # Low currents are 8-bit signed, 1 bit per 1A
+        hv_batt_raw = (b[1] << 8) | b[0]
+        hv_mot_raw = (b[3] << 8) | b[2]
+        # Convert to signed 16-bit
+        hv_batt = ((hv_batt_raw + 0x8000) % 0x10000 - 0x8000) * 0.1
+        hv_mot = ((hv_mot_raw + 0x8000) % 0x10000 - 0x8000) * 0.1
+        # 8-bit signed values
+        dcdc = ((b[4] + 128) % 256 - 128)
+        aux1 = ((b[5] + 128) % 256 - 128)
+        aux2 = ((b[6] + 128) % 256 - 128)
+        lvbat = ((b[7] + 128) % 256 - 128)
+        return {
+            "HV_BATT_Current": {"d": f"{hv_batt:+.1f}", "u": "A"},
+            "HV_MOT_Current": {"d": f"{hv_mot:+.1f}", "u": "A"},
+            "DCDC_Current": {"d": f"{dcdc:+.0f}", "u": "A"},
+            "AUX1_Current": {"d": f"{aux1:+.0f}", "u": "A"},
+            "AUX2_Current": {"d": f"{aux2:+.0f}", "u": "A"},
+            "LVBAT_Current": {"d": f"{lvbat:+.0f}", "u": "A"},
+        }
+
+    def decode_drive_frame(self, data):
+        if len(data) < 8: return {}
+        b = data
+
+        # Throttle: 1 bit per %, Range [0,100]
+        throttle = b[0]
+
+        # Status: bit field
+        status = b[1]
+        limp_mode = "Yes" if status & 0x01 else "No"
+        limited_range = "Yes" if status & 0x02 else "No"
+
+        # TCU RND: bit field
+        tcu_rnd = b[2]
+        tcu_validated = "Yes" if tcu_rnd & 0x01 else "No"
+        tcu_reverse = "Yes" if tcu_rnd & 0x02 else "No"
+        tcu_neutral = "Yes" if tcu_rnd & 0x04 else "No"
+        tcu_drive = "Yes" if tcu_rnd & 0x08 else "No"
+        tcu_eco_sport = "Yes" if tcu_rnd & 0x10 else "No"
+        tcu_dock = "Yes" if tcu_rnd & 0x20 else "No"
+        tcu_enabled = "Yes" if tcu_rnd & 0x40 else "No"
+        tcu_error_kill = "Yes" if tcu_rnd & 0x80 else "No"
+
+        # PCU RND: similar bit field (assuming same format)
+        pcu_rnd = b[3]
+        pcu_validated = "Yes" if pcu_rnd & 0x01 else "No"
+        pcu_reverse = "Yes" if pcu_rnd & 0x02 else "No"
+        pcu_neutral = "Yes" if pcu_rnd & 0x04 else "No"
+        pcu_drive = "Yes" if pcu_rnd & 0x08 else "No"
+        pcu_eco_sport = "Yes" if pcu_rnd & 0x10 else "No"
+        pcu_dock = "Yes" if pcu_rnd & 0x20 else "No"
+        pcu_enabled = "Yes" if pcu_rnd & 0x40 else "No"
+        pcu_error_kill = "Yes" if pcu_rnd & 0x80 else "No"
+
+        # Trim: 1 bit per %, Range [0,100]
+        trim = b[4]
+
+        # Range, Power, SOC: assuming direct values
+        range_val = b[5]
+        power = b[6]
+        soc = b[7]
+
+        return {
+            "Throttle": {"d": f"{throttle:.0f}", "u": "%"},
+            "LIMP_MODE": {"d": limp_mode, "u": ""},
+            "LIMITED_RANGE": {"d": limited_range, "u": ""},
+            "TCU_VALIDATED": {"d": tcu_validated, "u": ""},
+            "TCU_REVERSE": {"d": tcu_reverse, "u": ""},
+            "TCU_NEUTRAL": {"d": tcu_neutral, "u": ""},
+            "TCU_DRIVE": {"d": tcu_drive, "u": ""},
+            "TCU_ECO_SPORT": {"d": tcu_eco_sport, "u": ""},
+            "TCU_DOCK": {"d": tcu_dock, "u": ""},
+            "TCU_ENABLED": {"d": tcu_enabled, "u": ""},
+            "TCU_ERROR_KILL": {"d": tcu_error_kill, "u": ""},
+            "PCU_VALIDATED": {"d": pcu_validated, "u": ""},
+            "PCU_REVERSE": {"d": pcu_reverse, "u": ""},
+            "PCU_NEUTRAL": {"d": pcu_neutral, "u": ""},
+            "PCU_DRIVE": {"d": pcu_drive, "u": ""},
+            "PCU_ECO_SPORT": {"d": pcu_eco_sport, "u": ""},
+            "PCU_DOCK": {"d": pcu_dock, "u": ""},
+            "PCU_ENABLED": {"d": pcu_enabled, "u": ""},
+            "PCU_ERROR_KILL": {"d": pcu_error_kill, "u": ""},
+            "Trim": {"d": f"{trim:.0f}", "u": "%"},
+            "Range": {"d": f"{range_val:.0f}", "u": ""},
+            "Power": {"d": f"{power:.0f}", "u": ""},
+            "SOC": {"d": f"{soc:.0f}", "u": "%"},
+        }
+
+    def decode_spdtq_frame(self, data):
+        if len(data) < 8: return {}
+        b = data
+
+        # Motor Speed: 16-bit little-endian signed, 1 rpm per bit
+        motor_speed_raw = (b[1] << 8) | b[0]
+        motor_speed = ((motor_speed_raw + 0x8000) % 0x10000 - 0x8000)  # Signed 16-bit
+
+        # Motor Torque: 16-bit little-endian signed, 0.1 Nm per bit
+        motor_torque_raw = (b[3] << 8) | b[2]
+        motor_torque = ((motor_torque_raw + 0x8000) % 0x10000 - 0x8000) * 0.1  # Signed 16-bit
+
+        # Motor hours: 16-bit little-endian unsigned, 1 hour per bit
+        motor_hours = (b[5] << 8) | b[4]
+
+        # OB Err: 8-bit bit field
+        ob_err = b[6]
+        motor_failure = "Yes" if ob_err & 0x01 else "No"
+        inv_failure = "Yes" if ob_err & 0x02 else "No"
+        power_failure = "Yes" if ob_err & 0x04 else "No"
+        internal_failure = "Yes" if ob_err & 0x08 else "No"
+        cooling_failure = "Yes" if ob_err & 0x10 else "No"
+        can_failure = "Yes" if ob_err & 0x20 else "No"
+        flash_failure = "Yes" if ob_err & 0x40 else "No"
+        temp_failure = "Yes" if ob_err & 0x80 else "No"
+
+        # Mode: 8-bit bit field
+        mode = b[7]
+        temp_derating = "Yes" if mode & 0x01 else "No"
+        maintenance_mode = "Yes" if mode & 0x02 else "No"
+        sport_mode = "SPORT" if mode & 0x04 else "ECO"
+        boost_enabled = "Yes" if mode & 0x08 else "No"
+        critical_mode = "Yes" if mode & 0x10 else "No"
+        inverter_detected = "Yes" if mode & 0x20 else "No"
+        hv_detected = "Yes" if mode & 0x40 else "No"
+        propulsion_enabled = "Yes" if mode & 0x80 else "No"
+
+        return {
+            "Motor_Speed": {"d": f"{motor_speed:+.0f}", "u": "RPM"},
+            "Motor_Torque": {"d": f"{motor_torque:+.1f}", "u": "Nm"},
+            "Motor_Hours": {"d": f"{motor_hours:.0f}", "u": "h"},
+            "MOTOR_FAILURE": {"d": motor_failure, "u": ""},
+            "INV_FAILURE": {"d": inv_failure, "u": ""},
+            "POWER_FAILURE": {"d": power_failure, "u": ""},
+            "INTERNAL_FAILURE": {"d": internal_failure, "u": ""},
+            "COOLING_FAILURE": {"d": cooling_failure, "u": ""},
+            "CAN_FAILURE": {"d": can_failure, "u": ""},
+            "FLASH_FAILURE": {"d": flash_failure, "u": ""},
+            "TEMP_FAILURE": {"d": temp_failure, "u": ""},
+            "TEMP_DERATING": {"d": temp_derating, "u": ""},
+            "MAINTENANCE_MODE": {"d": maintenance_mode, "u": ""},
+            "DRIVE_MODE": {"d": sport_mode, "u": ""},
+            "BOOST_ENABLED": {"d": boost_enabled, "u": ""},
+            "CRITICAL_MODE": {"d": critical_mode, "u": ""},
+            "INVERTER_DETECTED": {"d": inverter_detected, "u": ""},
+            "HV_DETECTED": {"d": hv_detected, "u": ""},
+            "PROPULSION_ENABLED": {"d": propulsion_enabled, "u": ""},
+        }
+
+    def decode_power_frame(self, data):
+        if len(data) < 8: return {}
+        b = data
+
+        # Mode: 8-bit bit field
+        mode = b[0]
+        auxiliary_power = "Yes" if mode & 0x01 else "No"
+        maintenance_mode = "Yes" if mode & 0x02 else "No"
+        eco_mode = "Yes" if mode & 0x04 else "No"
+        sport_mode = "Yes" if mode & 0x08 else "No"
+        regen_enabled = "Yes" if mode & 0x10 else "No"
+        inverter_detected = "Yes" if mode & 0x20 else "No"
+        hv_detected = "Yes" if mode & 0x40 else "No"
+        start_stop = "Yes" if mode & 0x80 else "No"
+
+        # ServBatt: 8-bit, 0.1V per bit
+        servbatt = b[1] * 0.1
+
+        # PWM: 8-bit, 1% per bit
+        pwm = b[2]
+
+        # Trim: 8-bit, 1% per bit
+        trim = b[3]
+
+        # Inverter Voltage: 16-bit little-endian, 0.1V per bit
+        inv_voltage = ((b[5] << 8) | b[4]) * 0.1
+
+        # Inverter Current: 16-bit little-endian signed, 0.1A per bit
+        inv_current_raw = (b[7] << 8) | b[6]
+        inv_current = ((inv_current_raw + 0x8000) % 0x10000 - 0x8000) * 0.1
+
+        return {
+            "AUXILIARY_POWER": {"d": auxiliary_power, "u": ""},
+            "MAINTENANCE_MODE": {"d": maintenance_mode, "u": ""},
+            "ECO_MODE": {"d": eco_mode, "u": ""},
+            "SPORT_MODE": {"d": sport_mode, "u": ""},
+            "REGEN_ENABLED": {"d": regen_enabled, "u": ""},
+            "INVERTER_DETECTED": {"d": inverter_detected, "u": ""},
+            "HV_DETECTED": {"d": hv_detected, "u": ""},
+            "START_STOP": {"d": start_stop, "u": ""},
+            "SERVICE_BATTERY": {"d": f"{servbatt:.1f}", "u": "V"},
+            "PUMP_PWM": {"d": f"{pwm:.0f}", "u": "%"},
+            "TRIM_POSITION": {"d": f"{trim:.0f}", "u": "%"},
+            "INVERTER_VOLTAGE": {"d": f"{inv_voltage:.1f}", "u": "V"},
+            "INVERTER_CURRENT": {"d": f"{inv_current:+.1f}", "u": "A"},
+        }
+
     HEX_TO_DBC_ID = {
         0x727:1831, 0x587:1415, 0x107:263, 0x607:1543, 0x4F0:1264, 0x580:1408, 0x740:1856,
-        0x722:1826, 0x720:1824, 0x724:1828, 0x600:1536, 0x72E:1838,
+        0x722:1826, 0x720:1824, 0x600:1536, 0x72E:1838,
         0x400:1024, 0x401:1025, 0x403:1027, 0x405:1029, 0x406:1030,
         0x420:1056, 0x421:1057, 0x423:1059, 0x425:1061, 0x426:1062,
         0x440:1088, 0x441:1089, 0x443:1091, 0x445:1093, 0x446:1094,
@@ -447,11 +651,11 @@ class CANMonitor(QMainWindow):
     def create_hmi_tab(self):
         w = QWidget()
         l = QVBoxLayout(w)
-        l.addWidget(QLabel("HMI Frames (Temperature & Voltage)"))
+        l.addWidget(QLabel("HMI Frames (Temperature, Voltage, Current, Drive & Motor)"))
 
-        # Add hex displays for both frames
+        # Add hex displays for HMI frames
         hex_layout = QHBoxLayout()
-        for fid in [ID_TEMP_FRAME, ID_VOLT_FRAME]:
+        for fid in [ID_TEMP_FRAME, ID_VOLT_FRAME, ID_CURRENT_FRAME, ID_DRIVE_FRAME, ID_SPDTQ_FRAME]:
             hex_label = QLabel(f"0x{fid:03X}: {self.current_hex.get(fid, '00 00 00 00 00 00 00 00')}")
             hex_label.setStyleSheet("font-family: Consolas; font-size: 10px; color: #666; padding: 1px; margin-right: 10px;")
             self.hex_labels[fid] = hex_label
@@ -464,7 +668,7 @@ class CANMonitor(QMainWindow):
         table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         self.hmi_tab = table
         l.addWidget(table)
-        self.tabs.addTab(w, "0x111/0x112 – HMI Frames")
+        self.tabs.addTab(w, "HMI CAN2 (111/112/113/114/115)")
 
     def create_emulator_tab(self, can_id, tab_name, title, default_payload, presets=None):
         if presets is None: presets = []
@@ -718,6 +922,14 @@ class CANMonitor(QMainWindow):
             decoded_signals = self.decode_temperature_frame(msg.data)
         elif fid == ID_VOLT_FRAME:
             decoded_signals = self.decode_voltage_frame(msg.data)
+        elif fid == ID_CURRENT_FRAME:
+            decoded_signals = self.decode_current_frame(msg.data)
+        elif fid == ID_DRIVE_FRAME:
+            decoded_signals = self.decode_drive_frame(msg.data)
+        elif fid == ID_SPDTQ_FRAME:
+            decoded_signals = self.decode_spdtq_frame(msg.data)
+        elif fid == 0x724:
+            decoded_signals = self.decode_power_frame(msg.data)
         elif fid in [0x402,0x422,0x442,0x404,0x424,0x444,0x405,0x425,0x445,0x406,0x426,0x446]:
             decoded_signals = self.decode_battery_frame(fid, msg.data)
         else:
@@ -797,7 +1009,7 @@ class CANMonitor(QMainWindow):
         # Battery tabs (merged view)
         for idx, frames in [(1,BAT1_FRAMES),(2,BAT2_FRAMES),(3,BAT3_FRAMES)]:
             table = self.battery_tabs[idx]
-            all_sig = [item for fid in frames for item in self.signals.get(fid, {}).items()]
+            all_sig = sorted([item for fid in frames for item in self.signals.get(fid, {}).items()])
             table.setRowCount(len(all_sig))
             for r, (name, d) in enumerate(all_sig):
                 for c, val in enumerate([name, d.get("d",""), d.get("u",""), f"{d.get('t',0):.3f}"]):
@@ -810,10 +1022,10 @@ class CANMonitor(QMainWindow):
                 table.resizeColumnsToContents()
                 self.first_fill[f"BT{idx}"] = False
 
-        # HMI tab (combined temperature and voltage frames)
-        hmi_frames = [ID_TEMP_FRAME, ID_VOLT_FRAME]
+        # HMI tab (combined temperature, voltage, current, drive, and speed/torque frames)
+        hmi_frames = [ID_TEMP_FRAME, ID_VOLT_FRAME, ID_CURRENT_FRAME, ID_DRIVE_FRAME, ID_SPDTQ_FRAME]
         table = self.hmi_tab
-        all_sig = [item for fid in hmi_frames for item in self.signals.get(fid, {}).items()]
+        all_sig = sorted([item for fid in hmi_frames for item in self.signals.get(fid, {}).items()])
         table.setRowCount(len(all_sig))
         for r, (name, d) in enumerate(all_sig):
             for c, val in enumerate([name, d.get("d",""), d.get("u",""), f"{d.get('t',0):.3f}"]):
