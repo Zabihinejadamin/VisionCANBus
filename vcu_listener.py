@@ -64,6 +64,11 @@ ID_VOLT_FRAME = 0x112
 ID_CURRENT_FRAME = 0x113
 ID_DRIVE_FRAME = 0x114
 ID_SPDTQ_FRAME = 0x115
+ID_TCU_ENABLE_FRAME = 0x0CFF0BD0
+ID_TCU_PRND_FRAME = 0x18F005D0
+ID_TCU_THROTTLE_FRAME = 0x0CF003D0
+ID_TCU_TRIM_FRAME = 0x0CFF08D0
+ID_GPS_SPEED_FRAME = 0x09F8020A
 
 # ALL BATTERY FRAMES (now complete)
 BAT1_FRAMES = [0x400, 0x401, 0x402, 0x403, 0x404, 0x405, 0x406]
@@ -76,7 +81,7 @@ BAT1_EMULATOR_IDS = [0x400, 0x401, 0x402, 0x403, 0x404, 0x405, 0x406]
 EMULATOR_STATES = {k: False for k in [
     0x727,0x587,0x107,0x607,0x4F0,0x580,0x600,0x720,0x722,0x724,0x72E,
     ID_HV_CHARGER_STATUS, ID_HV_CHARGER_CMD, ID_DC12_COMM, ID_DC12_STAT,
-    ID_TEMP_FRAME
+    ID_TEMP_FRAME, ID_TCU_ENABLE_FRAME, ID_TCU_PRND_FRAME, ID_TCU_THROTTLE_FRAME, ID_TCU_TRIM_FRAME, ID_GPS_SPEED_FRAME
 ]}
 
 # Refresh intervals for different frame types (in seconds)
@@ -93,6 +98,11 @@ EMULATOR_INTERVALS = {
     ID_CURRENT_FRAME: 0.5,  # 500ms for current frame (0x113)
     ID_DRIVE_FRAME: 0.5,  # 500ms for drive frame (0x114)
     ID_SPDTQ_FRAME: 0.5,  # 500ms for speed/torque frame (0x115)
+    ID_TCU_ENABLE_FRAME: 0.5,  # 500ms for TCU enable frame
+    ID_TCU_PRND_FRAME: 0.5,  # 500ms for TCU PRND frame
+    ID_TCU_THROTTLE_FRAME: 0.5,  # 500ms for TCU throttle frame
+    ID_TCU_TRIM_FRAME: 0.5,  # 500ms for TCU trim frame
+    ID_GPS_SPEED_FRAME: 0.5,  # 500ms for GPS speed frame
 }
 
 # Default interval for other frames (100ms)
@@ -134,7 +144,8 @@ class CANMonitor(QMainWindow):
         all_ids = [ID_727,ID_587,ID_107,ID_607,ID_CMD_BMS,ID_PDU_STATUS,ID_HMI_STATUS,
                    ID_PCU_COOL,ID_PCU_MOTOR,ID_PCU_POWER,ID_CCU_STATUS,ID_ZCU_PUMP,
                    ID_HV_CHARGER_STATUS, ID_HV_CHARGER_CMD, ID_DC12_COMM, ID_DC12_STAT,
-                   ID_TEMP_FRAME, ID_VOLT_FRAME, ID_CURRENT_FRAME, ID_DRIVE_FRAME, ID_SPDTQ_FRAME]
+                   ID_TEMP_FRAME, ID_VOLT_FRAME, ID_CURRENT_FRAME, ID_DRIVE_FRAME, ID_SPDTQ_FRAME,
+                   ID_TCU_ENABLE_FRAME, ID_TCU_PRND_FRAME, ID_TCU_THROTTLE_FRAME, ID_TCU_TRIM_FRAME, ID_GPS_SPEED_FRAME]
         all_ids += BAT1_FRAMES + BAT2_FRAMES + BAT3_FRAMES
 
         self.signals = {id_: {} for id_ in set(all_ids)}
@@ -618,6 +629,65 @@ class CANMonitor(QMainWindow):
             "INVERTER_CURRENT": {"d": f"{inv_current:+.1f}", "u": "A"},
         }
 
+    def decode_tcu_enable_frame(self, data):
+        if len(data) < 8: return {}
+        b = data
+        # Enable: Byte 4, bit 2 (1 = TCU is talking, 0 = no TCU or fault)
+        enable = "Yes" if (b[4] & 0x04) else "No"
+        return {
+            "TCU_ENABLE": {"d": enable, "u": ""},
+        }
+
+    def decode_tcu_prnd_frame(self, data):
+        if len(data) < 8: return {}
+        b = data
+        # PRND: Byte 0 (8 bits) - 0x01=P, 0x02=R, 0x04=N, 0x08=D, 0x10=Auto, etc.
+        prnd_val = b[0]
+        prnd_status = []
+        if prnd_val & 0x01: prnd_status.append("P")
+        if prnd_val & 0x02: prnd_status.append("R")
+        if prnd_val & 0x04: prnd_status.append("N")
+        if prnd_val & 0x08: prnd_status.append("D")
+        if prnd_val & 0x10: prnd_status.append("Auto")
+        prnd_str = "/".join(prnd_status) if prnd_status else "None"
+        return {
+            "TCU_PRND": {"d": prnd_str, "u": ""},
+        }
+
+    def decode_tcu_throttle_frame(self, data):
+        if len(data) < 8: return {}
+        b = data
+        # Throttle: Byte 1 (8 bits) 0–255 → 0–100 %
+        throttle_raw = b[1]
+        throttle_percent = (throttle_raw / 255.0) * 100.0
+        return {
+            "TCU_Throttle": {"d": f"{throttle_percent:.1f}", "u": "%"},
+        }
+
+    def decode_tcu_trim_frame(self, data):
+        if len(data) < 8: return {}
+        b = data
+        # Trim: Byte 0, bits 0–3 - 0x01 = "+" pressed, 0x02 = "-" pressed, etc.
+        trim_bits = b[0] & 0x0F
+        trim_plus = "Yes" if trim_bits & 0x01 else "No"
+        trim_minus = "Yes" if trim_bits & 0x02 else "No"
+        # Other bits could be defined as needed
+        return {
+            "TCU_Trim_Plus": {"d": trim_plus, "u": ""},
+            "TCU_Trim_Minus": {"d": trim_minus, "u": ""},
+        }
+
+    def decode_gps_speed_frame(self, data):
+        if len(data) < 8: return {}
+        b = data
+        # GPS speed: Byte 4 and byte 5
+        gps_speed_raw = (b[5] << 8) | b[4]
+        # Assuming it's in some unit, probably km/h or mph - need to check the scaling
+        gps_speed = gps_speed_raw  # Placeholder - may need scaling
+        return {
+            "GPS_Speed": {"d": f"{gps_speed:.0f}", "u": "km/h"},  # Adjust unit as needed
+        }
+
     HEX_TO_DBC_ID = {
         0x727:1831, 0x587:1415, 0x107:263, 0x607:1543, 0x4F0:1264, 0x580:1408, 0x740:1856,
         0x722:1826, 0x720:1824, 0x600:1536, 0x72E:1838,
@@ -651,16 +721,77 @@ class CANMonitor(QMainWindow):
     def create_hmi_tab(self):
         w = QWidget()
         l = QVBoxLayout(w)
-        l.addWidget(QLabel("HMI Frames (Temperature, Voltage, Current, Drive & Motor)"))
+        l.addWidget(QLabel("HMI Frames (Temperature, Voltage, Current, Drive, Motor, TCU & GPS)"))
 
         # Add hex displays for HMI frames
         hex_layout = QHBoxLayout()
-        for fid in [ID_TEMP_FRAME, ID_VOLT_FRAME, ID_CURRENT_FRAME, ID_DRIVE_FRAME, ID_SPDTQ_FRAME]:
-            hex_label = QLabel(f"0x{fid:03X}: {self.current_hex.get(fid, '00 00 00 00 00 00 00 00')}")
+        for fid in [ID_TEMP_FRAME, ID_VOLT_FRAME, ID_CURRENT_FRAME, ID_DRIVE_FRAME, ID_SPDTQ_FRAME,
+                    ID_TCU_ENABLE_FRAME, ID_TCU_PRND_FRAME, ID_TCU_THROTTLE_FRAME, ID_TCU_TRIM_FRAME, ID_GPS_SPEED_FRAME]:
+            hex_label = QLabel(f"0x{fid:08X}: {self.current_hex.get(fid, '00 00 00 00 00 00 00 00')}")
             hex_label.setStyleSheet("font-family: Consolas; font-size: 10px; color: #666; padding: 1px; margin-right: 10px;")
             self.hex_labels[fid] = hex_label
             hex_layout.addWidget(hex_label)
         l.addLayout(hex_layout)
+
+        # Add TCU emulator controls
+        emu_group = QGroupBox("TCU Emulators")
+        emu_layout = QVBoxLayout(emu_group)
+
+        # Master TCU emulation control
+        master_layout = QHBoxLayout()
+        self.tcu_master_btn = QPushButton("OFF to Click to Enable ALL TCU")
+        self.tcu_master_btn.setStyleSheet("background:#555;color:white;font-weight:bold;")
+        master_layout.addWidget(self.tcu_master_btn)
+        master_layout.addWidget(QLabel("  → Sends all TCU frames continuously at 500ms intervals"))
+        master_layout.addStretch()
+        emu_layout.addLayout(master_layout)
+
+        # Individual payload editors
+        payloads_layout = QVBoxLayout()
+        payloads_group = QGroupBox("TCU Payloads (editable during transmission)")
+        payloads_inner = QVBoxLayout(payloads_group)
+
+        # Create input fields for each TCU frame
+        self.tcu_inputs = {}
+        self.tcu_inputs[ID_TCU_ENABLE_FRAME] = QLineEdit("00 00 00 00 04 00 00 00")
+        self.tcu_inputs[ID_TCU_PRND_FRAME] = QLineEdit("01 00 00 00 00 00 00 00")
+        self.tcu_inputs[ID_TCU_THROTTLE_FRAME] = QLineEdit("00 10 00 00 00 00 00 00")
+        self.tcu_inputs[ID_TCU_TRIM_FRAME] = QLineEdit("00 00 00 00 00 00 00 00")
+        self.tcu_inputs[ID_GPS_SPEED_FRAME] = QLineEdit("00 00 00 00 00 00 00 00")
+
+        # Add labeled input fields
+        enable_input_layout = QHBoxLayout()
+        enable_input_layout.addWidget(QLabel("TCU Enable (0CFF0BD0):"))
+        enable_input_layout.addWidget(self.tcu_inputs[ID_TCU_ENABLE_FRAME])
+        payloads_inner.addLayout(enable_input_layout)
+
+        prnd_input_layout = QHBoxLayout()
+        prnd_input_layout.addWidget(QLabel("TCU PRND (18F005D0):"))
+        prnd_input_layout.addWidget(self.tcu_inputs[ID_TCU_PRND_FRAME])
+        payloads_inner.addLayout(prnd_input_layout)
+
+        throttle_input_layout = QHBoxLayout()
+        throttle_input_layout.addWidget(QLabel("TCU Throttle (0CF003D0):"))
+        throttle_input_layout.addWidget(self.tcu_inputs[ID_TCU_THROTTLE_FRAME])
+        payloads_inner.addLayout(throttle_input_layout)
+
+        trim_input_layout = QHBoxLayout()
+        trim_input_layout.addWidget(QLabel("TCU Trim (0CFF08D0):"))
+        trim_input_layout.addWidget(self.tcu_inputs[ID_TCU_TRIM_FRAME])
+        payloads_inner.addLayout(trim_input_layout)
+
+        gps_input_layout = QHBoxLayout()
+        gps_input_layout.addWidget(QLabel("GPS Speed (09F8020A):"))
+        gps_input_layout.addWidget(self.tcu_inputs[ID_GPS_SPEED_FRAME])
+        payloads_inner.addLayout(gps_input_layout)
+
+        payloads_layout.addWidget(payloads_group)
+        emu_layout.addLayout(payloads_layout)
+
+        l.addWidget(emu_group)
+
+        # Connect the master button
+        self.tcu_master_btn.clicked.connect(self.toggle_all_tcu_emulation)
 
         table = QTableWidget()
         table.setColumnCount(4)
@@ -668,7 +799,7 @@ class CANMonitor(QMainWindow):
         table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         self.hmi_tab = table
         l.addWidget(table)
-        self.tabs.addTab(w, "HMI CAN2")
+        self.tabs.addTab(w, "HMI CAN2 (111-115, TCU, GPS)")
 
     def create_emulator_tab(self, can_id, tab_name, title, default_payload, presets=None):
         if presets is None: presets = []
@@ -833,6 +964,32 @@ class CANMonitor(QMainWindow):
             self.bat_btn.setStyleSheet("background:#388E3C;color:white;")
             self.stop_timer("battery")
 
+    def toggle_all_tcu_emulation(self):
+        """Toggle continuous transmission of all TCU frames"""
+        tcu_frames = [ID_TCU_ENABLE_FRAME, ID_TCU_PRND_FRAME, ID_TCU_THROTTLE_FRAME, ID_TCU_TRIM_FRAME, ID_GPS_SPEED_FRAME]
+
+        # Check if any TCU frame is currently enabled
+        any_enabled = any(EMULATOR_STATES.get(fid, False) for fid in tcu_frames)
+
+        if not any_enabled:
+            # Start all TCU emulations
+            for fid in tcu_frames:
+                EMULATOR_STATES[fid] = True
+                interval = get_emulator_interval(fid)  # Should be 0.5 for all TCU frames
+                input_field = self.tcu_inputs[fid]
+                self.start_timer(fid, lambda fid=fid, input=input_field: self.send_raw(fid, input.text()), interval)
+
+            self.tcu_master_btn.setText("ON – ALL TCU @2Hz (500ms)")
+            self.tcu_master_btn.setStyleSheet("background:#d32f2f;color:white;font-weight:bold;")
+        else:
+            # Stop all TCU emulations
+            for fid in tcu_frames:
+                EMULATOR_STATES[fid] = False
+                self.stop_timer(fid)
+
+            self.tcu_master_btn.setText("OFF to Click to Enable ALL TCU")
+            self.tcu_master_btn.setStyleSheet("background:#555;color:white;font-weight:bold;")
+
     def start_timer(self, can_id, callback, interval_seconds=None):
         # Initialize emu_timers dictionary if it doesn't exist
         if not hasattr(self, "emu_timers"):
@@ -928,6 +1085,16 @@ class CANMonitor(QMainWindow):
             decoded_signals = self.decode_drive_frame(msg.data)
         elif fid == ID_SPDTQ_FRAME:
             decoded_signals = self.decode_spdtq_frame(msg.data)
+        elif fid == ID_TCU_ENABLE_FRAME:
+            decoded_signals = self.decode_tcu_enable_frame(msg.data)
+        elif fid == ID_TCU_PRND_FRAME:
+            decoded_signals = self.decode_tcu_prnd_frame(msg.data)
+        elif fid == ID_TCU_THROTTLE_FRAME:
+            decoded_signals = self.decode_tcu_throttle_frame(msg.data)
+        elif fid == ID_TCU_TRIM_FRAME:
+            decoded_signals = self.decode_tcu_trim_frame(msg.data)
+        elif fid == ID_GPS_SPEED_FRAME:
+            decoded_signals = self.decode_gps_speed_frame(msg.data)
         elif fid == 0x724:
             decoded_signals = self.decode_power_frame(msg.data)
         elif fid in [0x402,0x422,0x442,0x404,0x424,0x444,0x405,0x425,0x445,0x406,0x426,0x446]:
@@ -1022,8 +1189,9 @@ class CANMonitor(QMainWindow):
                 table.resizeColumnsToContents()
                 self.first_fill[f"BT{idx}"] = False
 
-        # HMI tab (combined temperature, voltage, current, drive, and speed/torque frames)
-        hmi_frames = [ID_TEMP_FRAME, ID_VOLT_FRAME, ID_CURRENT_FRAME, ID_DRIVE_FRAME, ID_SPDTQ_FRAME]
+        # HMI tab (combined temperature, voltage, current, drive, speed/torque, TCU, and GPS frames)
+        hmi_frames = [ID_TEMP_FRAME, ID_VOLT_FRAME, ID_CURRENT_FRAME, ID_DRIVE_FRAME, ID_SPDTQ_FRAME,
+                      ID_TCU_ENABLE_FRAME, ID_TCU_PRND_FRAME, ID_TCU_THROTTLE_FRAME, ID_TCU_TRIM_FRAME, ID_GPS_SPEED_FRAME]
         table = self.hmi_tab
         all_sig = sorted([item for fid in hmi_frames for item in self.signals.get(fid, {}).items()])
         table.setRowCount(len(all_sig))
