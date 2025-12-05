@@ -588,7 +588,7 @@ class CANMonitor(QMainWindow):
         if len(data) < 8: return {}
         b = data
 
-        # Mode: 8-bit bit field
+        # Mode: power mode & status bit field
         mode = b[0]
         auxiliary_power = "Yes" if mode & 0x01 else "No"
         maintenance_mode = "Yes" if mode & 0x02 else "No"
@@ -599,19 +599,19 @@ class CANMonitor(QMainWindow):
         hv_detected = "Yes" if mode & 0x40 else "No"
         start_stop = "Yes" if mode & 0x80 else "No"
 
-        # ServBatt: 8-bit, 0.1V per bit
-        servbatt = b[1] * 0.1
+        # BattServ: battery service voltage, 1 bit per 0.1V
+        battserv = b[1] * 0.1
 
-        # PWM: 8-bit, 1% per bit
-        pwm = b[2]
+        # Pump: 12V pump current, 1 bit per 0.1A
+        pump_current = b[2] * 0.1
 
-        # Trim: 8-bit, 1% per bit
-        trim = b[3]
+        # Trim: 12V/24V trim current, 1 bit per 1A
+        trim_current = b[3]
 
-        # Inverter Voltage: 16-bit little-endian, 0.1V per bit
+        # Inverter voltage: 16-bit little-endian, 1 bit per 0.1V
         inv_voltage = ((b[5] << 8) | b[4]) * 0.1
 
-        # Inverter Current: 16-bit little-endian signed, 0.1A per bit
+        # Inverter current: 16-bit little-endian signed, 1 bit per 0.1A
         inv_current_raw = (b[7] << 8) | b[6]
         inv_current = ((inv_current_raw + 0x8000) % 0x10000 - 0x8000) * 0.1
 
@@ -624,9 +624,9 @@ class CANMonitor(QMainWindow):
             "INVERTER_DETECTED": {"d": inverter_detected, "u": ""},
             "HV_DETECTED": {"d": hv_detected, "u": ""},
             "START_STOP": {"d": start_stop, "u": ""},
-            "SERVICE_BATTERY": {"d": f"{servbatt:.1f}", "u": "V"},
-            "PUMP_PWM": {"d": f"{pwm:.0f}", "u": "%"},
-            "TRIM_POSITION": {"d": f"{trim:.0f}", "u": "%"},
+            "BATT_SERV": {"d": f"{battserv:.1f}", "u": "V"},
+            "PUMP_CURRENT": {"d": f"{pump_current:.1f}", "u": "A"},
+            "TRIM_CURRENT": {"d": f"{trim_current:.0f}", "u": "A"},
             "INVERTER_VOLTAGE": {"d": f"{inv_voltage:.1f}", "u": "V"},
             "INVERTER_CURRENT": {"d": f"{inv_current:+.1f}", "u": "A"},
         }
@@ -678,25 +678,37 @@ class CANMonitor(QMainWindow):
             signals["TEMP_FAILURE"] = {"d": "Yes" if failure & 0x80 else "No", "u": ""}
 
         elif frame_id == 0x722:  # PCU Cooling
-            # Coolant Temperature: 8-bit, offset by -40°C
-            coolant_temp = b[0] - 40
-            signals["COOLANT_TEMP"] = {"d": f"{coolant_temp:+.0f}", "u": "°C"}
+            # Cool_MT: outboard coolant temperature, 8-bit with -40°C offset, 1°C per bit
+            cool_mt = b[0] - 40
+            signals["COOL_MT"] = {"d": f"{cool_mt:+.0f}", "u": "°C"}
 
-            # Pump Speed: 8-bit, percentage
-            pump_speed = b[1]
-            signals["PUMP_SPEED"] = {"d": f"{pump_speed:.0f}", "u": "%"}
+            # Cool_BT: battery coolant temperature, 8-bit with -40°C offset, 1°C per bit
+            cool_bt = b[1] - 40
+            signals["COOL_BT"] = {"d": f"{cool_bt:+.0f}", "u": "°C"}
 
-            # Fan Speed: 8-bit, percentage
-            fan_speed = b[2]
-            signals["FAN_SPEED"] = {"d": f"{fan_speed:.0f}", "u": "%"}
+            # FlowSea: sea water flow rate, 8-bit unsigned, 1 L/m per bit, range 0-255
+            flow_sea = b[2]
+            signals["FLOW_SEA"] = {"d": f"{flow_sea:.0f}", "u": "L/m"}
 
-            # Radiator Temperature: 8-bit, offset by -40°C
-            rad_temp = b[3] - 40
-            signals["RADIATOR_TEMP"] = {"d": f"{rad_temp:+.0f}", "u": "°C"}
+            # FlowGlycol: glycol-water flow rate, 8-bit unsigned, 0.1 L/m per bit, range 0-255
+            flow_glycol = b[3] * 0.1
+            signals["FLOW_GLYCOL"] = {"d": f"{flow_glycol:.1f}", "u": "L/m"}
 
-            # Coolant Flow: 16-bit little-endian, 0.1 L/min per bit
-            flow = ((b[5] << 8) | b[4]) * 0.1
-            signals["COOLANT_FLOW"] = {"d": f"{flow:.1f}", "u": "L/min"}
+            # Stator: motor temperature, 8-bit with -40°C offset, 1°C per bit
+            stator_temp = b[4] - 40
+            signals["STATOR_TEMP"] = {"d": f"{stator_temp:+.0f}", "u": "°C"}
+
+            # Inv: inverter temperature, 8-bit with -40°C offset, 1°C per bit
+            inv_temp = b[5] - 40
+            signals["INV_TEMP"] = {"d": f"{inv_temp:+.0f}", "u": "°C"}
+
+            # Rotor: rotor temperature, 8-bit with -40°C offset, 1°C per bit
+            rotor_temp = b[6] - 40
+            signals["ROTOR_TEMP"] = {"d": f"{rotor_temp:+.0f}", "u": "°C"}
+
+            # Battery: battery temperature, 8-bit with -40°C offset, 1°C per bit
+            battery_temp = b[7] - 40
+            signals["BATTERY_TEMP"] = {"d": f"{battery_temp:+.0f}", "u": "°C"}
 
         elif frame_id == 0x724:  # PCU Power - reuse existing decode_power_frame logic
             return self.decode_power_frame(data)
@@ -831,7 +843,7 @@ class CANMonitor(QMainWindow):
         self.tcu_inputs[ID_TCU_PRND_FRAME] = QLineEdit("01 00 00 00 00 00 00 00")
         self.tcu_inputs[ID_TCU_THROTTLE_FRAME] = QLineEdit("00 10 00 00 00 00 00 00")
         self.tcu_inputs[ID_TCU_TRIM_FRAME] = QLineEdit("00 00 00 00 00 00 00 00")
-        self.tcu_inputs[ID_GPS_SPEED_FRAME] = QLineEdit("00 00 00 00 00 00 00 00")
+        self.tcu_inputs[ID_GPS_SPEED_FRAME] = QLineEdit("00 00 00 00 00 11 00 00")
 
         # Add labeled input fields
         enable_input_layout = QHBoxLayout()
