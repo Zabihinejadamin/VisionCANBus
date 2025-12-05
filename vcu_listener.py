@@ -89,10 +89,10 @@ EMULATOR_INTERVALS = {
     0x600: 0.05,  # 50ms for CCU status
     0x720: 0.05,  # 50ms for motor status
     0x722: 0.2,   # 200ms for PCU cooling status
-    # Battery frames and temperature frame use 100ms (0.1 seconds)
-    0x400: 0.1, 0x401: 0.1, 0x402: 0.1, 0x403: 0.1, 0x404: 0.1, 0x405: 0.1, 0x406: 0.1,
-    0x420: 0.1, 0x421: 0.1, 0x422: 0.1, 0x423: 0.1, 0x424: 0.1, 0x425: 0.1, 0x426: 0.1,
-    0x440: 0.1, 0x441: 0.1, 0x442: 0.1, 0x443: 0.1, 0x444: 0.1, 0x445: 0.1, 0x446: 0.1,
+    # Battery frames and temperature frame use 250ms (0.25 seconds)
+    0x400: 0.25, 0x401: 0.25, 0x402: 0.25, 0x403: 0.25, 0x404: 0.25, 0x405: 0.25, 0x406: 0.25,
+    0x420: 0.25, 0x421: 0.25, 0x422: 0.25, 0x423: 0.25, 0x424: 0.25, 0x425: 0.25, 0x426: 0.25,
+    0x440: 0.25, 0x441: 0.25, 0x442: 0.25, 0x443: 0.25, 0x444: 0.25, 0x445: 0.25, 0x446: 0.25,
     ID_TEMP_FRAME: 0.1,  # 100ms for temperature frame (0x111)
     ID_VOLT_FRAME: 0.5,  # 500ms for voltage frame (0x112)
     ID_CURRENT_FRAME: 0.5,  # 500ms for current frame (0x113)
