@@ -638,27 +638,44 @@ class CANMonitor(QMainWindow):
         signals = {}
 
         if frame_id == 0x720:  # Motor Status
-            # Motor RPM: 16-bit little-endian
-            motor_rpm = (b[1] << 8) | b[0]
-            signals["MOTOR_RPM"] = {"d": f"{motor_rpm}", "u": "RPM"}
+            # Motor Hours: 16-bit little-endian unsigned, range 0-10000
+            motor_hours = (b[1] << 8) | b[0]
+            signals["MOTOR_HOURS"] = {"d": f"{motor_hours}", "u": "h"}
 
-            # Motor Temperature: 8-bit, offset by -40°C
-            motor_temp = b[2] - 40
-            signals["MOTOR_TEMP"] = {"d": f"{motor_temp:+.0f}", "u": "°C"}
-
-            # Inverter Temperature: 8-bit, offset by -40°C
-            inv_temp = b[3] - 40
-            signals["INVERTER_TEMP"] = {"d": f"{inv_temp:+.0f}", "u": "°C"}
-
-            # Motor Torque: 16-bit little-endian signed, 0.1 Nm per bit
-            torque_raw = (b[5] << 8) | b[4]
+            # Motor Torque: 16-bit little-endian signed, 1 bit per 0.1Nm, range -30000 to 30000
+            torque_raw = (b[3] << 8) | b[2]
             torque = ((torque_raw + 0x8000) % 0x10000 - 0x8000) * 0.1
             signals["MOTOR_TORQUE"] = {"d": f"{torque:+.1f}", "u": "Nm"}
 
-            # Motor Status bits in byte 6
-            status = b[6]
-            signals["MOTOR_READY"] = {"d": "Yes" if status & 0x01 else "No", "u": ""}
-            signals["MOTOR_FAULT"] = {"d": "Yes" if status & 0x02 else "No", "u": ""}
+            # Motor Speed: 16-bit little-endian unsigned, 1 bit per rpm, range 0-30000
+            motor_speed = (b[5] << 8) | b[4]
+            signals["MOTOR_SPEED"] = {"d": f"{motor_speed}", "u": "RPM"}
+
+            # PRND: byte 6, bit field for drive selection and states
+            prnd = b[6]
+            prnd_status = []
+            if prnd & 0x01: prnd_status.append("P")  # Parking
+            if prnd & 0x02: prnd_status.append("R")  # Reverse
+            if prnd & 0x04: prnd_status.append("N")  # Neutral
+            if prnd & 0x08: prnd_status.append("D")  # Drive
+            signals["PRND"] = {"d": "/".join(prnd_status) if prnd_status else "None", "u": ""}
+
+            # Additional PRND states
+            signals["JAKE_STATE"] = {"d": "Active" if prnd & 0x10 else "Inactive", "u": ""}
+            signals["BOOST_STATE"] = {"d": "Active" if prnd & 0x20 else "Inactive", "u": ""}
+            signals["TRIM_STATE"] = {"d": "Active" if prnd & 0x40 else "Inactive", "u": ""}
+            signals["IGN_STATE"] = {"d": "On" if prnd & 0x80 else "Off", "u": ""}
+
+            # Failure: byte 7, bit field for various failures
+            failure = b[7]
+            signals["MOTOR_FAILURE"] = {"d": "Yes" if failure & 0x01 else "No", "u": ""}
+            signals["INV_FAILURE"] = {"d": "Yes" if failure & 0x02 else "No", "u": ""}
+            signals["POWER_FAILURE"] = {"d": "Yes" if failure & 0x04 else "No", "u": ""}
+            signals["INTERNAL_FAILURE"] = {"d": "Yes" if failure & 0x08 else "No", "u": ""}
+            signals["COOLING_FAILURE"] = {"d": "Yes" if failure & 0x10 else "No", "u": ""}
+            signals["CANBUS_FAILURE"] = {"d": "Yes" if failure & 0x20 else "No", "u": ""}
+            signals["FLASH_FAILURE"] = {"d": "Yes" if failure & 0x40 else "No", "u": ""}
+            signals["TEMP_FAILURE"] = {"d": "Yes" if failure & 0x80 else "No", "u": ""}
 
         elif frame_id == 0x722:  # PCU Cooling
             # Coolant Temperature: 8-bit, offset by -40°C
