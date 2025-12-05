@@ -75,6 +75,9 @@ BAT1_FRAMES = [0x400, 0x401, 0x402, 0x403, 0x404, 0x405, 0x406]
 BAT2_FRAMES = [0x420, 0x421, 0x422, 0x423, 0x424, 0x425, 0x426]
 BAT3_FRAMES = [0x440, 0x441, 0x442, 0x443, 0x444, 0x445, 0x446]
 
+# PCU FRAMES (Power Control Unit)
+PCU_FRAMES = [0x720, 0x722, 0x724]
+
 # Emulator uses all frames for Battery 1
 BAT1_EMULATOR_IDS = [0x400, 0x401, 0x402, 0x403, 0x404, 0x405, 0x406]
 
@@ -89,10 +92,10 @@ EMULATOR_INTERVALS = {
     0x600: 0.05,  # 50ms for CCU status
     0x720: 0.05,  # 50ms for motor status
     0x722: 0.2,   # 200ms for PCU cooling status
-    # Battery frames and temperature frame use 250ms (0.25 seconds)
-    0x400: 0.25, 0x401: 0.25, 0x402: 0.25, 0x403: 0.25, 0x404: 0.25, 0x405: 0.25, 0x406: 0.25,
-    0x420: 0.25, 0x421: 0.25, 0x422: 0.25, 0x423: 0.25, 0x424: 0.25, 0x425: 0.25, 0x426: 0.25,
-    0x440: 0.25, 0x441: 0.25, 0x442: 0.25, 0x443: 0.25, 0x444: 0.25, 0x445: 0.25, 0x446: 0.25,
+    # Battery frames and temperature frame use 150ms (0.15 seconds)
+    0x400: 0.15, 0x401: 0.15, 0x402: 0.15, 0x403: 0.15, 0x404: 0.15, 0x405: 0.15, 0x406: 0.15,
+    0x420: 0.15, 0x421: 0.15, 0x422: 0.15, 0x423: 0.15, 0x424: 0.15, 0x425: 0.15, 0x426: 0.15,
+    0x440: 0.15, 0x441: 0.15, 0x442: 0.15, 0x443: 0.15, 0x444: 0.15, 0x445: 0.15, 0x446: 0.15,
     ID_TEMP_FRAME: 0.1,  # 100ms for temperature frame (0x111)
     ID_VOLT_FRAME: 0.5,  # 500ms for voltage frame (0x112)
     ID_CURRENT_FRAME: 0.5,  # 500ms for current frame (0x113)
@@ -109,6 +112,7 @@ EMULATOR_INTERVALS = {
 EMULATOR_INTERVAL_DEFAULT = 0.1
 
 EMULATOR_BAT1_ENABLED = False
+EMULATOR_PCU_ENABLED = False
 
 
 def get_emulator_interval(can_id):
@@ -218,13 +222,11 @@ class CANMonitor(QMainWindow):
         self.create_emulator_tab(0x607, "0x607 – CCU/ZCU Cmd", "CCU/ZCU Command", "01 00 00 00 00 00 00 00")
         self.create_emulator_tab(0x4F0, "0x4F0 – VCU→BMS", "VCU to BMS", "00 01 00 01 00 00 00 00",
                                  [("Idle","00 00 00 00 00 00 00 00"), ("Precharge","02 00 00 00 00 00 00 00"), ("Close","01 00 00 00 00 00 00 00")])
-        self.create_emulator_tab(0x580, "0x580 – PDU Stat", "PDU Relays", "99 00 00 99 04 00 00 F3",
+        self.create_emulator_tab(0x580, "PDU Stat", "PDU Relays", "99 00 00 99 04 00 00 F3",
                                  [("All OFF","00 00 00 00 00 00 00 00"), ("Main+Pre","03 00 00 00 00 00 00 00"), ("All ON","FF FF FF FF FF FF FF FF")])
-        self.create_emulator_tab(0x600, "0x600 – CCU", "CCU Stat", "3A 39 50 54 8D 00 3C 00")
-        self.create_emulator_tab(0x720, "0x720 – Motor", "Motor Stat", "f0 04 9e 11 36 15 08 01")
-        self.create_emulator_tab(0x722, "0x722 – Cooling", "PCU Cooling", "4a 5e 30 64 43 4b 5e 49")
-        self.create_emulator_tab(0x724, "0x724 – Power", "PCU Power", "E4 8A 28 1D E5 1A 00 00")
-        self.create_emulator_tab(0x72E, "0x72E – ZCU Pump", "ZCU Pump Stat", "28 00 00 00 00 3C 08 00",
+        self.create_emulator_tab(0x600, "CCU stat", "CCU Stat", "3A 39 50 54 8D 00 3C 00")
+        self.create_pcu_tab_with_emulator("PCU stat", PCU_FRAMES)
+        self.create_emulator_tab(0x72E, "ZCU stat", "ZCU Pump Stat", "28 00 00 00 00 3C 08 00",
                                  [("OFF","00 00 00 00 00 00 00 00"), ("50%","01 32 00 00 00 00 00 00"), ("100%","01 64 00 00 00 00 00 00")])
 
         self.create_emulator_tab(
@@ -629,6 +631,61 @@ class CANMonitor(QMainWindow):
             "INVERTER_CURRENT": {"d": f"{inv_current:+.1f}", "u": "A"},
         }
 
+    def decode_pcu_frame(self, frame_id: int, data: bytes):
+        if len(data) < 8:
+            return {}
+        b = data
+        signals = {}
+
+        if frame_id == 0x720:  # Motor Status
+            # Motor RPM: 16-bit little-endian
+            motor_rpm = (b[1] << 8) | b[0]
+            signals["MOTOR_RPM"] = {"d": f"{motor_rpm}", "u": "RPM"}
+
+            # Motor Temperature: 8-bit, offset by -40°C
+            motor_temp = b[2] - 40
+            signals["MOTOR_TEMP"] = {"d": f"{motor_temp:+.0f}", "u": "°C"}
+
+            # Inverter Temperature: 8-bit, offset by -40°C
+            inv_temp = b[3] - 40
+            signals["INVERTER_TEMP"] = {"d": f"{inv_temp:+.0f}", "u": "°C"}
+
+            # Motor Torque: 16-bit little-endian signed, 0.1 Nm per bit
+            torque_raw = (b[5] << 8) | b[4]
+            torque = ((torque_raw + 0x8000) % 0x10000 - 0x8000) * 0.1
+            signals["MOTOR_TORQUE"] = {"d": f"{torque:+.1f}", "u": "Nm"}
+
+            # Motor Status bits in byte 6
+            status = b[6]
+            signals["MOTOR_READY"] = {"d": "Yes" if status & 0x01 else "No", "u": ""}
+            signals["MOTOR_FAULT"] = {"d": "Yes" if status & 0x02 else "No", "u": ""}
+
+        elif frame_id == 0x722:  # PCU Cooling
+            # Coolant Temperature: 8-bit, offset by -40°C
+            coolant_temp = b[0] - 40
+            signals["COOLANT_TEMP"] = {"d": f"{coolant_temp:+.0f}", "u": "°C"}
+
+            # Pump Speed: 8-bit, percentage
+            pump_speed = b[1]
+            signals["PUMP_SPEED"] = {"d": f"{pump_speed:.0f}", "u": "%"}
+
+            # Fan Speed: 8-bit, percentage
+            fan_speed = b[2]
+            signals["FAN_SPEED"] = {"d": f"{fan_speed:.0f}", "u": "%"}
+
+            # Radiator Temperature: 8-bit, offset by -40°C
+            rad_temp = b[3] - 40
+            signals["RADIATOR_TEMP"] = {"d": f"{rad_temp:+.0f}", "u": "°C"}
+
+            # Coolant Flow: 16-bit little-endian, 0.1 L/min per bit
+            flow = ((b[5] << 8) | b[4]) * 0.1
+            signals["COOLANT_FLOW"] = {"d": f"{flow:.1f}", "u": "L/min"}
+
+        elif frame_id == 0x724:  # PCU Power - reuse existing decode_power_frame logic
+            return self.decode_power_frame(data)
+
+        return signals
+
     def decode_tcu_enable_frame(self, data):
         if len(data) < 8: return {}
         b = data
@@ -915,6 +972,57 @@ class CANMonitor(QMainWindow):
         splitter.setSizes([1100, 500])
         self.tabs.addTab(w, name)
 
+    def create_pcu_tab_with_emulator(self, name, frame_ids):
+        w = QWidget()
+        main_layout = QVBoxLayout(w)
+        main_layout.addWidget(QLabel(f"{name} – Live + Emulator"))
+        splitter = QSplitter(Qt.Horizontal)
+        main_layout.addWidget(splitter)
+
+        table = QTableWidget()
+        table.setColumnCount(4)
+        table.setHorizontalHeaderLabels(["Signal","Value","Unit","TS"])
+        table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        self.pcu_tab = table
+        splitter.addWidget(table)
+
+        emu = QWidget()
+        el = QVBoxLayout(emu)
+        el.addWidget(QLabel("<b>PCU Full Emulator (720-724)</b>"))
+        self.pcu_inputs = {}
+        defaults = {
+            0x720: "f0 04 9e 11 36 15 08 01",  # Motor Stat
+            0x722: "4a 5e 30 64 43 4b 5e 49",  # PCU Cooling
+            0x724: "E4 8A 28 1D E5 1A 00 00",  # PCU Power
+        }
+        for cid in PCU_FRAMES:
+            box = QGroupBox(f"0x{cid:03X}")
+            bl = QVBoxLayout(box)
+
+            # Add hex display label for this frame
+            hex_label = QLabel(f"0x{cid:03X}: {self.current_hex.get(cid, '00 00 00 00 00 00 00 00')}")
+            hex_label.setStyleSheet("font-family: Consolas; font-size: 10px; color: #666; padding: 1px;")
+            self.hex_labels[cid] = hex_label
+            bl.addWidget(hex_label)
+
+            line = QLineEdit(defaults.get(cid, "00 00 00 00 00 00 00 00"))
+            line.setFixedWidth(340)
+            self.pcu_inputs[cid] = line
+            send_btn = QPushButton("SEND ONCE")
+            send_btn.clicked.connect(lambda _, id=cid: self.send_raw(id, line.text()))
+            bl.addWidget(line)
+            bl.addWidget(send_btn)
+            el.addWidget(box)
+
+        self.pcu_btn = QPushButton("OFF to Click to Enable Cycle")
+        self.pcu_btn.clicked.connect(self.toggle_pcu)
+        self.pcu_btn.setStyleSheet("background:#388E3C;color:white;")
+        el.addWidget(self.pcu_btn)
+        el.addStretch()
+        splitter.addWidget(emu)
+        splitter.setSizes([1100, 500])
+        self.tabs.addTab(w, name)
+
     def create_battery_tab(self, name, idx, frame_ids):
         w = QWidget()
         l = QVBoxLayout(w)
@@ -963,6 +1071,24 @@ class CANMonitor(QMainWindow):
             self.bat_btn.setText("OFF to Click to Enable Cycle")
             self.bat_btn.setStyleSheet("background:#388E3C;color:white;")
             self.stop_timer("battery")
+
+    def toggle_pcu(self):
+        global EMULATOR_PCU_ENABLED
+        EMULATOR_PCU_ENABLED = not EMULATOR_PCU_ENABLED
+        if EMULATOR_PCU_ENABLED:
+            self.pcu_btn.setText("ON – Cycling PCU Frames")
+            self.pcu_btn.setStyleSheet("background:#2E7D32;color:white;")
+            self.pcu_cycle_index = 0
+            self.start_timer("pcu", self.send_pcu_cycle, 0.1)  # Use appropriate interval for PCU frames
+        else:
+            self.pcu_btn.setText("OFF to Click to Enable Cycle")
+            self.pcu_btn.setStyleSheet("background:#388E3C;color:white;")
+            self.stop_timer("pcu")
+
+    def send_pcu_cycle(self):
+        cid = PCU_FRAMES[self.pcu_cycle_index]
+        self.send_raw(cid, self.pcu_inputs[cid].text())
+        self.pcu_cycle_index = (self.pcu_cycle_index + 1) % len(PCU_FRAMES)
 
     def toggle_all_tcu_emulation(self):
         """Toggle continuous transmission of all TCU frames"""
@@ -1095,8 +1221,8 @@ class CANMonitor(QMainWindow):
             decoded_signals = self.decode_tcu_trim_frame(msg.data)
         elif fid == ID_GPS_SPEED_FRAME:
             decoded_signals = self.decode_gps_speed_frame(msg.data)
-        elif fid == 0x724:
-            decoded_signals = self.decode_power_frame(msg.data)
+        elif fid in PCU_FRAMES:
+            decoded_signals = self.decode_pcu_frame(fid, msg.data)
         elif fid in [0x402,0x422,0x442,0x404,0x424,0x444,0x405,0x425,0x445,0x406,0x426,0x446]:
             decoded_signals = self.decode_battery_frame(fid, msg.data)
         else:
@@ -1188,6 +1314,22 @@ class CANMonitor(QMainWindow):
             if self.first_fill.get(f"BT{idx}", False):
                 table.resizeColumnsToContents()
                 self.first_fill[f"BT{idx}"] = False
+
+        # PCU tab (merged view)
+        if hasattr(self, 'pcu_tab'):
+            table = self.pcu_tab
+            all_sig = sorted([item for fid in PCU_FRAMES for item in self.signals.get(fid, {}).items()])
+            table.setRowCount(len(all_sig))
+            for r, (name, d) in enumerate(all_sig):
+                for c, val in enumerate([name, d.get("d",""), d.get("u",""), f"{d.get('t',0):.3f}"]):
+                    item = table.item(r, c)
+                    if not item:
+                        table.setItem(r, c, QTableWidgetItem(val))
+                    else:
+                        item.setText(val)
+            if self.first_fill.get("PCU", False):
+                table.resizeColumnsToContents()
+                self.first_fill["PCU"] = False
 
         # HMI tab (combined temperature, voltage, current, drive, speed/torque, TCU, and GPS frames)
         hmi_frames = [ID_TEMP_FRAME, ID_VOLT_FRAME, ID_CURRENT_FRAME, ID_DRIVE_FRAME, ID_SPDTQ_FRAME,
