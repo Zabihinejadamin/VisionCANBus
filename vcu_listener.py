@@ -297,7 +297,7 @@ class CANMonitor(QMainWindow):
         self.raw_log.setStyleSheet("font-family: Consolas; font-size: 10px;")
         # Add control buttons for modified values
         controls_layout = QHBoxLayout()
-        self.clear_modified_btn = QPushButton("Clear Modified PDU Values")
+        self.clear_modified_btn = QPushButton("Clear Modified Values (PDU & PCU)")
         self.clear_modified_btn.clicked.connect(self.clear_modified_values)
         self.clear_modified_btn.setStyleSheet("background:#ff9800;color:white;font-weight:bold;")
         controls_layout.addWidget(self.clear_modified_btn)
@@ -629,19 +629,19 @@ class CANMonitor(QMainWindow):
         inv_current = ((inv_current_raw + 0x8000) % 0x10000 - 0x8000) * 0.1
 
         return {
-            "AUXILIARY_POWER": {"d": auxiliary_power, "u": ""},
-            "MAINTENANCE_MODE": {"d": maintenance_mode, "u": ""},
-            "ECO_MODE": {"d": eco_mode, "u": ""},
-            "SPORT_MODE": {"d": sport_mode, "u": ""},
-            "REGEN_ENABLED": {"d": regen_enabled, "u": ""},
-            "INVERTER_DETECTED": {"d": inverter_detected, "u": ""},
-            "HV_DETECTED": {"d": hv_detected, "u": ""},
-            "START_STOP": {"d": start_stop, "u": ""},
-            "BATT_SERV": {"d": f"{battserv:.1f}", "u": "V"},
-            "PUMP_CURRENT": {"d": f"{pump_current:.1f}", "u": "A"},
-            "TRIM_CURRENT": {"d": f"{trim_current:.0f}", "u": "A"},
-            "INVERTER_VOLTAGE": {"d": f"{inv_voltage:.1f}", "u": "V"},
-            "INVERTER_CURRENT": {"d": f"{inv_current:+.1f}", "u": "A"},
+            "AUXILIARY_POWER": {"d": auxiliary_power, "u": "", "v": bool(mode & 0x01)},
+            "MAINTENANCE_MODE": {"d": maintenance_mode, "u": "", "v": bool(mode & 0x02)},
+            "ECO_MODE": {"d": eco_mode, "u": "", "v": bool(mode & 0x04)},
+            "SPORT_MODE": {"d": sport_mode, "u": "", "v": bool(mode & 0x08)},
+            "REGEN_ENABLED": {"d": regen_enabled, "u": "", "v": bool(mode & 0x10)},
+            "INVERTER_DETECTED": {"d": inverter_detected, "u": "", "v": bool(mode & 0x20)},
+            "HV_DETECTED": {"d": hv_detected, "u": "", "v": bool(mode & 0x40)},
+            "START_STOP": {"d": start_stop, "u": "", "v": bool(mode & 0x80)},
+            "BATT_SERV": {"d": f"{battserv:.1f}", "u": "V", "v": battserv},
+            "PUMP_CURRENT": {"d": f"{pump_current:.1f}", "u": "A", "v": pump_current},
+            "TRIM_CURRENT": {"d": f"{trim_current:.0f}", "u": "A", "v": trim_current},
+            "INVERTER_VOLTAGE": {"d": f"{inv_voltage:.1f}", "u": "V", "v": inv_voltage},
+            "INVERTER_CURRENT": {"d": f"{inv_current:+.1f}", "u": "A", "v": inv_current},
         }
 
     def decode_pcu_frame(self, frame_id: int, data: bytes):
@@ -653,16 +653,16 @@ class CANMonitor(QMainWindow):
         if frame_id == 0x720:  # Motor Status
             # Motor Hours: 16-bit little-endian unsigned, range 0-10000
             motor_hours = (b[1] << 8) | b[0]
-            signals["MOTOR_HOURS"] = {"d": f"{motor_hours}", "u": "h"}
+            signals["MOTOR_HOURS"] = {"d": f"{motor_hours}", "u": "h", "v": motor_hours}
 
             # Motor Torque: 16-bit little-endian signed, 1 bit per 0.1Nm, range -30000 to 30000
             torque_raw = (b[3] << 8) | b[2]
             torque = ((torque_raw + 0x8000) % 0x10000 - 0x8000) * 0.1
-            signals["MOTOR_TORQUE"] = {"d": f"{torque:+.1f}", "u": "Nm"}
+            signals["MOTOR_TORQUE"] = {"d": f"{torque:+.1f}", "u": "Nm", "v": torque}
 
             # Motor Speed: 16-bit little-endian unsigned, 1 bit per rpm, range 0-30000
             motor_speed = (b[5] << 8) | b[4]
-            signals["MOTOR_SPEED"] = {"d": f"{motor_speed}", "u": "RPM"}
+            signals["MOTOR_SPEED"] = {"d": f"{motor_speed}", "u": "RPM", "v": motor_speed}
 
             # PRND: byte 6, bit field for drive selection and states
             prnd = b[6]
@@ -671,57 +671,57 @@ class CANMonitor(QMainWindow):
             if prnd & 0x02: prnd_status.append("R")  # Reverse
             if prnd & 0x04: prnd_status.append("N")  # Neutral
             if prnd & 0x08: prnd_status.append("D")  # Drive
-            signals["PRND"] = {"d": "/".join(prnd_status) if prnd_status else "None", "u": ""}
+            signals["PRND"] = {"d": "/".join(prnd_status) if prnd_status else "None", "u": "", "v": prnd}
 
             # Additional PRND states
-            signals["JAKE_STATE"] = {"d": "Active" if prnd & 0x10 else "Inactive", "u": ""}
-            signals["BOOST_STATE"] = {"d": "Active" if prnd & 0x20 else "Inactive", "u": ""}
-            signals["TRIM_STATE"] = {"d": "Active" if prnd & 0x40 else "Inactive", "u": ""}
-            signals["IGN_STATE"] = {"d": "On" if prnd & 0x80 else "Off", "u": ""}
+            signals["JAKE_STATE"] = {"d": "Active" if prnd & 0x10 else "Inactive", "u": "", "v": bool(prnd & 0x10)}
+            signals["BOOST_STATE"] = {"d": "Active" if prnd & 0x20 else "Inactive", "u": "", "v": bool(prnd & 0x20)}
+            signals["TRIM_STATE"] = {"d": "Active" if prnd & 0x40 else "Inactive", "u": "", "v": bool(prnd & 0x40)}
+            signals["IGN_STATE"] = {"d": "On" if prnd & 0x80 else "Off", "u": "", "v": bool(prnd & 0x80)}
 
             # Failure: byte 7, bit field for various failures
             failure = b[7]
-            signals["MOTOR_FAILURE"] = {"d": "Yes" if failure & 0x01 else "No", "u": ""}
-            signals["INV_FAILURE"] = {"d": "Yes" if failure & 0x02 else "No", "u": ""}
-            signals["POWER_FAILURE"] = {"d": "Yes" if failure & 0x04 else "No", "u": ""}
-            signals["INTERNAL_FAILURE"] = {"d": "Yes" if failure & 0x08 else "No", "u": ""}
-            signals["COOLING_FAILURE"] = {"d": "Yes" if failure & 0x10 else "No", "u": ""}
-            signals["CANBUS_FAILURE"] = {"d": "Yes" if failure & 0x20 else "No", "u": ""}
-            signals["FLASH_FAILURE"] = {"d": "Yes" if failure & 0x40 else "No", "u": ""}
-            signals["TEMP_FAILURE"] = {"d": "Yes" if failure & 0x80 else "No", "u": ""}
+            signals["MOTOR_FAILURE"] = {"d": "Yes" if failure & 0x01 else "No", "u": "", "v": bool(failure & 0x01)}
+            signals["INV_FAILURE"] = {"d": "Yes" if failure & 0x02 else "No", "u": "", "v": bool(failure & 0x02)}
+            signals["POWER_FAILURE"] = {"d": "Yes" if failure & 0x04 else "No", "u": "", "v": bool(failure & 0x04)}
+            signals["INTERNAL_FAILURE"] = {"d": "Yes" if failure & 0x08 else "No", "u": "", "v": bool(failure & 0x08)}
+            signals["COOLING_FAILURE"] = {"d": "Yes" if failure & 0x10 else "No", "u": "", "v": bool(failure & 0x10)}
+            signals["CANBUS_FAILURE"] = {"d": "Yes" if failure & 0x20 else "No", "u": "", "v": bool(failure & 0x20)}
+            signals["FLASH_FAILURE"] = {"d": "Yes" if failure & 0x40 else "No", "u": "", "v": bool(failure & 0x40)}
+            signals["TEMP_FAILURE"] = {"d": "Yes" if failure & 0x80 else "No", "u": "", "v": bool(failure & 0x80)}
 
         elif frame_id == 0x722:  # PCU Cooling
             # Cool_MT: outboard coolant temperature, 8-bit with -40°C offset, 1°C per bit
             cool_mt = b[0] - 40
-            signals["COOL_MT"] = {"d": f"{cool_mt:+.0f}", "u": "°C"}
+            signals["COOL_MT"] = {"d": f"{cool_mt:+.0f}", "u": "°C", "v": cool_mt}
 
             # Cool_BT: battery coolant temperature, 8-bit with -40°C offset, 1°C per bit
             cool_bt = b[1] - 40
-            signals["COOL_BT"] = {"d": f"{cool_bt:+.0f}", "u": "°C"}
+            signals["COOL_BT"] = {"d": f"{cool_bt:+.0f}", "u": "°C", "v": cool_bt}
 
             # FlowSea: sea water flow rate, 8-bit unsigned, 1 L/m per bit, range 0-255
             flow_sea = b[2]
-            signals["FLOW_SEA"] = {"d": f"{flow_sea:.0f}", "u": "L/m"}
+            signals["FLOW_SEA"] = {"d": f"{flow_sea:.0f}", "u": "L/m", "v": flow_sea}
 
             # FlowGlycol: glycol-water flow rate, 8-bit unsigned, 0.1 L/m per bit, range 0-255
             flow_glycol = b[3] * 0.1
-            signals["FLOW_GLYCOL"] = {"d": f"{flow_glycol:.1f}", "u": "L/m"}
+            signals["FLOW_GLYCOL"] = {"d": f"{flow_glycol:.1f}", "u": "L/m", "v": flow_glycol}
 
             # Stator: motor temperature, 8-bit with -40°C offset, 1°C per bit
             stator_temp = b[4] - 40
-            signals["STATOR_TEMP"] = {"d": f"{stator_temp:+.0f}", "u": "°C"}
+            signals["STATOR_TEMP"] = {"d": f"{stator_temp:+.0f}", "u": "°C", "v": stator_temp}
 
             # Inv: inverter temperature, 8-bit with -40°C offset, 1°C per bit
             inv_temp = b[5] - 40
-            signals["INV_TEMP"] = {"d": f"{inv_temp:+.0f}", "u": "°C"}
+            signals["INV_TEMP"] = {"d": f"{inv_temp:+.0f}", "u": "°C", "v": inv_temp}
 
             # Rotor: rotor temperature, 8-bit with -40°C offset, 1°C per bit
             rotor_temp = b[6] - 40
-            signals["ROTOR_TEMP"] = {"d": f"{rotor_temp:+.0f}", "u": "°C"}
+            signals["ROTOR_TEMP"] = {"d": f"{rotor_temp:+.0f}", "u": "°C", "v": rotor_temp}
 
             # Battery: battery temperature, 8-bit with -40°C offset, 1°C per bit
             battery_temp = b[7] - 40
-            signals["BATTERY_TEMP"] = {"d": f"{battery_temp:+.0f}", "u": "°C"}
+            signals["BATTERY_TEMP"] = {"d": f"{battery_temp:+.0f}", "u": "°C", "v": battery_temp}
 
         elif frame_id == 0x724:  # PCU Power - reuse existing decode_power_frame logic
             return self.decode_power_frame(data)
@@ -1290,7 +1290,12 @@ class CANMonitor(QMainWindow):
         if 'decoded_signals' in locals():
             with self.lock:
                 self.signals[fid].update({
-                    name: {"d": val["d"], "u": val["u"], "t": time.time()}
+                    name: {
+                        "d": val["d"], 
+                        "u": val["u"], 
+                        "v": val.get("v", val["d"]),  # Store value if available, otherwise use display
+                        "t": time.time()
+                    }
                     for name, val in decoded_signals.items()
                 })
 
@@ -1393,18 +1398,54 @@ class CANMonitor(QMainWindow):
         # PCU tab (merged view)
         if hasattr(self, 'pcu_tab'):
             table = self.pcu_tab
-            all_sig = sorted([item for fid in PCU_FRAMES for item in self.signals.get(fid, {}).items()])
+            all_sig = []
+            for fid in PCU_FRAMES:
+                for name, d in self.signals.get(fid, {}).items():
+                    # Use modified value if available, otherwise use live CAN data
+                    modified_data = self.modified_signals.get(fid, {}).get(name)
+                    if modified_data:
+                        display_data = modified_data.copy()
+                    else:
+                        display_data = d.copy()
+                    all_sig.append((name, display_data, fid))  # Include frame ID
+
+            all_sig.sort(key=lambda x: x[0])  # Sort by signal name
             table.setRowCount(len(all_sig))
-            for r, (name, d) in enumerate(all_sig):
+            for r, (name, d, fid) in enumerate(all_sig):
+                # Check if this value is modified
+                is_modified = self.modified_signals.get(fid, {}).get(name) is not None
+
                 for c, val in enumerate([name, d.get("d",""), d.get("u",""), f"{d.get('t',0):.3f}"]):
                     item = table.item(r, c)
                     if not item:
-                        table.setItem(r, c, QTableWidgetItem(val))
+                        item = QTableWidgetItem(val)
+                        table.setItem(r, c, item)
+                        # Make the value column (column 1) editable for PCU frames
+                        if c == 1:
+                            item.setFlags(item.flags() | Qt.ItemIsEditable)
+                            # Store frame ID and signal name for later use
+                            item.setData(Qt.UserRole, (fid, name))
+                        # Highlight modified values
+                        if is_modified and c == 1:
+                            item.setBackground(Qt.yellow)
                     else:
-                        item.setText(val)
+                        # Only update if not currently being edited by user
+                        if not table.isPersistentEditorOpen(item):
+                            item.setText(val)
+                            # Update background color
+                            if is_modified and c == 1:
+                                item.setBackground(Qt.yellow)
+                            elif c == 1:
+                                item.setBackground(Qt.white)
+
             if self.first_fill.get("PCU", False):
                 table.resizeColumnsToContents()
                 self.first_fill["PCU"] = False
+
+            # Connect item changed signal if not already connected
+            if not hasattr(table, '_item_changed_connected'):
+                table.itemChanged.connect(lambda item: self.on_pcu_table_item_changed(item))
+                table._item_changed_connected = True
 
         # HMI tab (combined temperature, voltage, current, drive, speed/torque, TCU, and GPS frames)
         hmi_frames = [ID_TEMP_FRAME, ID_VOLT_FRAME, ID_CURRENT_FRAME, ID_DRIVE_FRAME, ID_SPDTQ_FRAME,
@@ -1555,13 +1596,457 @@ class CANMonitor(QMainWindow):
             import traceback
             traceback.print_exc()
 
+    def on_pcu_table_item_changed(self, item):
+        """Handle changes to PCU table items"""
+        if item.column() != 1:  # Only handle value column changes
+            return
+
+        # Get frame ID and signal name from stored data
+        data = item.data(Qt.UserRole)
+        if not data:
+            return
+
+        frame_id, signal_name = data
+        new_value = item.text()
+
+        print(f"PCU value changed: Frame {frame_id:03X}, Signal {signal_name} = {new_value}")
+
+        # Store the modified value
+        if frame_id not in self.modified_signals:
+            self.modified_signals[frame_id] = {}
+        
+        # Get original signal data to preserve value type
+        original_sig = self.signals.get(frame_id, {}).get(signal_name, {})
+        
+        # Try to parse the new value to the same type as original
+        try:
+            # Get original value type
+            if "v" in original_sig:
+                original_val = original_sig["v"]
+                # Try to convert new_value to same type
+                if isinstance(original_val, bool):
+                    # Handle boolean values
+                    parsed_val = new_value.lower() in ["yes", "true", "1", "on", "active"]
+                elif isinstance(original_val, float):
+                    clean_val = new_value.replace("°C", "").replace("V", "").replace("A", "").replace("%", "").replace("RPM", "").replace("Nm", "").replace("h", "").replace("L/m", "").strip()
+                    parsed_val = float(clean_val) if clean_val else 0.0
+                elif isinstance(original_val, int):
+                    clean_val = new_value.replace("°C", "").replace("V", "").replace("A", "").replace("%", "").replace("RPM", "").replace("Nm", "").replace("h", "").replace("L/m", "").strip()
+                    parsed_val = int(float(clean_val)) if clean_val else 0
+                else:
+                    # Keep as string for enum types
+                    parsed_val = new_value
+            else:
+                # Try to infer type from display value
+                clean_val = new_value.replace("°C", "").replace("V", "").replace("A", "").replace("%", "").replace("RPM", "").replace("Nm", "").replace("h", "").replace("L/m", "").strip()
+                if clean_val.lower() in ["yes", "no", "true", "false", "active", "inactive", "on", "off"]:
+                    parsed_val = clean_val.lower() in ["yes", "true", "active", "on"]
+                elif "." in clean_val:
+                    parsed_val = float(clean_val)
+                else:
+                    parsed_val = int(clean_val) if clean_val else 0
+        except (ValueError, AttributeError):
+            # If parsing fails, try to use original value
+            parsed_val = original_sig.get("v", 0)
+
+        self.modified_signals[frame_id][signal_name] = {
+            "d": new_value,  # Display value
+            "v": parsed_val,  # Parsed value for encoding
+            "u": original_sig.get("u", ""),  # Unit
+            "t": time.time()
+        }
+
+        # Update hex payload for PCU frame
+        self.update_pcu_hex_from_table(frame_id)
+
+    def update_pcu_hex_from_table(self, frame_id):
+        """Update hex payload for PCU frames when table values change"""
+        if frame_id not in PCU_FRAMES:
+            return
+
+        try:
+            # For PCU frames, use custom encoding since we use custom decoding
+            # This ensures signal names match between decode and encode
+            if frame_id == 0x720:
+                # Motor Status frame - use custom encoding
+                self.update_pcu_motor_hex(frame_id)
+            elif frame_id == 0x722:
+                # PCU Cooling frame - use custom encoding
+                self.update_pcu_cooling_hex(frame_id)
+            elif frame_id == 0x724:
+                # PCU Power frame - use custom encoding
+                self.update_pcu_power_hex(frame_id)
+            else:
+                # Try DBC encoding for other frames
+                dbc_id = self.HEX_TO_DBC_ID.get(frame_id)
+                if dbc_id is not None:
+                    # Use DBC encoding
+                    # Collect all signal values (use modified if available, otherwise use live)
+                    signal_values = {}
+                    for sig_name, sig_data in self.signals.get(frame_id, {}).items():
+                        # Check if this signal has been modified
+                        modified = self.modified_signals.get(frame_id, {}).get(sig_name)
+                        if modified and "v" in modified:
+                            # Use modified parsed value
+                            signal_values[sig_name] = modified["v"]
+                        elif "v" in sig_data:
+                            # Use live value
+                            signal_values[sig_name] = sig_data["v"]
+                        else:
+                            # Fallback: try to parse display value
+                            display_val = modified.get("d", "") if modified else sig_data.get("d", "")
+                            try:
+                                clean_val = display_val.replace("°C", "").replace("V", "").replace("A", "").replace("%", "").replace("RPM", "").replace("Nm", "").replace("h", "").replace("L/m", "").strip()
+                                if "." in clean_val:
+                                    signal_values[sig_name] = float(clean_val)
+                                else:
+                                    signal_values[sig_name] = int(clean_val) if clean_val else 0
+                            except (ValueError, AttributeError):
+                                signal_values[sig_name] = 0
+
+                    # Encode the message using cantools
+                    try:
+                        encoded_data = self.db.encode_message(dbc_id, signal_values)
+                        
+                        # Convert to hex string
+                        hex_string = encoded_data.hex(' ').upper()
+
+                        # Update the hex input field
+                        # Check if it's in pcu_inputs dictionary
+                        if hasattr(self, 'pcu_inputs') and frame_id in self.pcu_inputs:
+                            input_field = self.pcu_inputs[frame_id]
+                            input_field.setText(hex_string)
+                            print(f"Updated PCU frame {frame_id:03X} hex payload: {hex_string}")
+                        else:
+                            # Fallback: try attribute name (for other frames like PDU)
+                            input_attr = f"input_{frame_id:x}"
+                            if hasattr(self, input_attr):
+                                input_field = getattr(self, input_attr)
+                                input_field.setText(hex_string)
+                                print(f"Updated frame {frame_id:03X} hex payload: {hex_string}")
+                            else:
+                                print(f"Warning: No input field found for frame {frame_id:03X}")
+                    except Exception as encode_error:
+                        print(f"Error encoding DBC message for frame {frame_id:03X} (DBC ID {dbc_id}): {encode_error}")
+                        print(f"Signal values: {signal_values}")
+                        import traceback
+                        traceback.print_exc()
+
+        except Exception as e:
+            print(f"Error updating PCU hex from table for frame {frame_id:03X}: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def update_pcu_motor_hex(self, frame_id):
+        """Custom encoder for PCU Motor Status frame (0x720)"""
+        try:
+            b = [0] * 8
+
+            # Collect all signal values (use modified if available, otherwise use live)
+            signal_values = {}
+            for sig_name, sig_data in self.signals.get(frame_id, {}).items():
+                modified = self.modified_signals.get(frame_id, {}).get(sig_name)
+                if modified and "v" in modified:
+                    signal_values[sig_name] = modified["v"]
+                elif "v" in sig_data:
+                    signal_values[sig_name] = sig_data["v"]
+                else:
+                    # Parse display value
+                    display_val = modified.get("d", "") if modified else sig_data.get("d", "")
+                    try:
+                        if sig_name in ["MOTOR_FAILURE", "INV_FAILURE", "POWER_FAILURE", "INTERNAL_FAILURE",
+                                       "COOLING_FAILURE", "CANBUS_FAILURE", "FLASH_FAILURE", "TEMP_FAILURE",
+                                       "JAKE_STATE", "BOOST_STATE", "TRIM_STATE", "IGN_STATE"]:
+                            signal_values[sig_name] = display_val.lower() in ["yes", "true", "1", "on", "active"]
+                        elif sig_name == "PRND":
+                            # PRND is stored as raw byte value
+                            signal_values[sig_name] = sig_data.get("v", 0)
+                        else:
+                            clean_val = display_val.replace("RPM", "").replace("Nm", "").replace("h", "").strip()
+                            signal_values[sig_name] = float(clean_val) if "." in clean_val else int(clean_val) if clean_val else 0
+                    except (ValueError, AttributeError):
+                        signal_values[sig_name] = 0
+
+            # Motor Hours: bytes 0-1, 16-bit little-endian unsigned
+            if "MOTOR_HOURS" in signal_values:
+                motor_hours = max(0, min(65535, int(signal_values["MOTOR_HOURS"])))
+                b[0] = motor_hours & 0xFF
+                b[1] = (motor_hours >> 8) & 0xFF
+
+            # Motor Torque: bytes 2-3, 16-bit little-endian signed, 1 bit per 0.1Nm
+            if "MOTOR_TORQUE" in signal_values:
+                torque = signal_values["MOTOR_TORQUE"]
+                torque_raw = max(-32768, min(32767, int(torque / 0.1)))
+                # Convert to unsigned 16-bit
+                torque_unsigned = (torque_raw + 0x8000) % 0x10000
+                b[2] = torque_unsigned & 0xFF
+                b[3] = (torque_unsigned >> 8) & 0xFF
+
+            # Motor Speed: bytes 4-5, 16-bit little-endian unsigned
+            if "MOTOR_SPEED" in signal_values:
+                motor_speed = max(0, min(65535, int(signal_values["MOTOR_SPEED"])))
+                b[4] = motor_speed & 0xFF
+                b[5] = (motor_speed >> 8) & 0xFF
+
+            # PRND: byte 6, bit field
+            if "PRND" in signal_values:
+                prnd = signal_values["PRND"]
+                # If PRND is a string, try to parse it, otherwise use the raw value
+                if isinstance(prnd, str):
+                    prnd_val = 0
+                    if "P" in prnd.upper():
+                        prnd_val |= 0x01
+                    if "R" in prnd.upper():
+                        prnd_val |= 0x02
+                    if "N" in prnd.upper():
+                        prnd_val |= 0x04
+                    if "D" in prnd.upper():
+                        prnd_val |= 0x08
+                    b[6] = prnd_val
+                else:
+                    b[6] = prnd & 0xFF
+            else:
+                # Build PRND from individual states
+                prnd = 0
+                if signal_values.get("JAKE_STATE"):
+                    prnd |= 0x10
+                if signal_values.get("BOOST_STATE"):
+                    prnd |= 0x20
+                if signal_values.get("TRIM_STATE"):
+                    prnd |= 0x40
+                if signal_values.get("IGN_STATE"):
+                    prnd |= 0x80
+                b[6] = prnd
+
+            # Failure: byte 7, bit field
+            failure = 0
+            if signal_values.get("MOTOR_FAILURE"):
+                failure |= 0x01
+            if signal_values.get("INV_FAILURE"):
+                failure |= 0x02
+            if signal_values.get("POWER_FAILURE"):
+                failure |= 0x04
+            if signal_values.get("INTERNAL_FAILURE"):
+                failure |= 0x08
+            if signal_values.get("COOLING_FAILURE"):
+                failure |= 0x10
+            if signal_values.get("CANBUS_FAILURE"):
+                failure |= 0x20
+            if signal_values.get("FLASH_FAILURE"):
+                failure |= 0x40
+            if signal_values.get("TEMP_FAILURE"):
+                failure |= 0x80
+            b[7] = failure
+
+            # Convert to hex string
+            hex_string = bytes(b).hex(' ').upper()
+
+            # Update the hex input field
+            if hasattr(self, 'pcu_inputs') and frame_id in self.pcu_inputs:
+                input_field = self.pcu_inputs[frame_id]
+                input_field.setText(hex_string)
+                print(f"Updated PCU Motor frame {frame_id:03X} hex payload: {hex_string}")
+            else:
+                print(f"Warning: No input field found for frame {frame_id:03X}")
+
+        except Exception as e:
+            print(f"Error encoding PCU Motor frame {frame_id:03X}: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def update_pcu_cooling_hex(self, frame_id):
+        """Custom encoder for PCU Cooling frame (0x722)"""
+        try:
+            b = [0] * 8
+
+            # Collect all signal values (use modified if available, otherwise use live)
+            signal_values = {}
+            for sig_name, sig_data in self.signals.get(frame_id, {}).items():
+                modified = self.modified_signals.get(frame_id, {}).get(sig_name)
+                if modified and "v" in modified:
+                    signal_values[sig_name] = modified["v"]
+                elif "v" in sig_data:
+                    signal_values[sig_name] = sig_data["v"]
+                else:
+                    # Parse display value
+                    display_val = modified.get("d", "") if modified else sig_data.get("d", "")
+                    try:
+                        clean_val = display_val.replace("°C", "").replace("L/m", "").strip()
+                        signal_values[sig_name] = float(clean_val) if "." in clean_val else int(clean_val) if clean_val else 0
+                    except (ValueError, AttributeError):
+                        signal_values[sig_name] = 0
+
+            # Cool_MT: byte 0, 8-bit with -40°C offset
+            if "COOL_MT" in signal_values:
+                cool_mt = signal_values["COOL_MT"]
+                b[0] = max(0, min(255, int(cool_mt + 40)))
+
+            # Cool_BT: byte 1, 8-bit with -40°C offset
+            if "COOL_BT" in signal_values:
+                cool_bt = signal_values["COOL_BT"]
+                b[1] = max(0, min(255, int(cool_bt + 40)))
+
+            # FlowSea: byte 2, 8-bit unsigned
+            if "FLOW_SEA" in signal_values:
+                flow_sea = signal_values["FLOW_SEA"]
+                b[2] = max(0, min(255, int(flow_sea)))
+
+            # FlowGlycol: byte 3, 8-bit unsigned, 0.1 L/m per bit
+            if "FLOW_GLYCOL" in signal_values:
+                flow_glycol = signal_values["FLOW_GLYCOL"]
+                b[3] = max(0, min(255, int(flow_glycol / 0.1)))
+
+            # Stator: byte 4, 8-bit with -40°C offset
+            if "STATOR_TEMP" in signal_values:
+                stator_temp = signal_values["STATOR_TEMP"]
+                b[4] = max(0, min(255, int(stator_temp + 40)))
+
+            # Inv: byte 5, 8-bit with -40°C offset
+            if "INV_TEMP" in signal_values:
+                inv_temp = signal_values["INV_TEMP"]
+                b[5] = max(0, min(255, int(inv_temp + 40)))
+
+            # Rotor: byte 6, 8-bit with -40°C offset
+            if "ROTOR_TEMP" in signal_values:
+                rotor_temp = signal_values["ROTOR_TEMP"]
+                b[6] = max(0, min(255, int(rotor_temp + 40)))
+
+            # Battery: byte 7, 8-bit with -40°C offset
+            if "BATTERY_TEMP" in signal_values:
+                battery_temp = signal_values["BATTERY_TEMP"]
+                b[7] = max(0, min(255, int(battery_temp + 40)))
+
+            # Convert to hex string
+            hex_string = bytes(b).hex(' ').upper()
+
+            # Update the hex input field
+            if hasattr(self, 'pcu_inputs') and frame_id in self.pcu_inputs:
+                input_field = self.pcu_inputs[frame_id]
+                input_field.setText(hex_string)
+                print(f"Updated PCU Cooling frame {frame_id:03X} hex payload: {hex_string}")
+            else:
+                print(f"Warning: No input field found for frame {frame_id:03X}")
+
+        except Exception as e:
+            print(f"Error encoding PCU Cooling frame {frame_id:03X}: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def update_pcu_power_hex(self, frame_id):
+        """Custom encoder for PCU Power frame (0x724)"""
+        try:
+            b = [0] * 8
+
+            # Collect all signal values (use modified if available, otherwise use live)
+            signal_values = {}
+            for sig_name, sig_data in self.signals.get(frame_id, {}).items():
+                modified = self.modified_signals.get(frame_id, {}).get(sig_name)
+                if modified and "v" in modified:
+                    signal_values[sig_name] = modified["v"]
+                elif "v" in sig_data:
+                    signal_values[sig_name] = sig_data["v"]
+                else:
+                    # Parse display value
+                    display_val = modified.get("d", "") if modified else sig_data.get("d", "")
+                    try:
+                        if sig_name in ["AUXILIARY_POWER", "MAINTENANCE_MODE", "ECO_MODE", "SPORT_MODE", 
+                                       "REGEN_ENABLED", "INVERTER_DETECTED", "HV_DETECTED", "START_STOP"]:
+                            signal_values[sig_name] = display_val.lower() in ["yes", "true", "1", "on"]
+                        else:
+                            clean_val = display_val.replace("V", "").replace("A", "").strip()
+                            signal_values[sig_name] = float(clean_val) if "." in clean_val else int(clean_val) if clean_val else 0
+                    except (ValueError, AttributeError):
+                        signal_values[sig_name] = 0
+
+            # Mode: byte 0, bit field
+            mode = 0
+            if signal_values.get("AUXILIARY_POWER"):
+                mode |= 0x01
+            if signal_values.get("MAINTENANCE_MODE"):
+                mode |= 0x02
+            if signal_values.get("ECO_MODE"):
+                mode |= 0x04
+            if signal_values.get("SPORT_MODE"):
+                mode |= 0x08
+            if signal_values.get("REGEN_ENABLED"):
+                mode |= 0x10
+            if signal_values.get("INVERTER_DETECTED"):
+                mode |= 0x20
+            if signal_values.get("HV_DETECTED"):
+                mode |= 0x40
+            if signal_values.get("START_STOP"):
+                mode |= 0x80
+            b[0] = mode
+
+            # BattServ: byte 1, 1 bit per 0.1V
+            if "BATT_SERV" in signal_values:
+                battserv = signal_values["BATT_SERV"]
+                b[1] = max(0, min(255, int(battserv / 0.1)))
+
+            # Pump: byte 2, 1 bit per 0.1A
+            if "PUMP_CURRENT" in signal_values:
+                pump = signal_values["PUMP_CURRENT"]
+                b[2] = max(0, min(255, int(pump / 0.1)))
+
+            # Trim: byte 3, 1 bit per 1A
+            if "TRIM_CURRENT" in signal_values:
+                trim = signal_values["TRIM_CURRENT"]
+                b[3] = max(0, min(255, int(trim)))
+
+            # Inverter voltage: bytes 4-5, 16-bit little-endian, 1 bit per 0.1V
+            if "INVERTER_VOLTAGE" in signal_values:
+                inv_voltage = signal_values["INVERTER_VOLTAGE"]
+                inv_voltage_raw = max(0, min(65535, int(inv_voltage / 0.1)))
+                b[4] = inv_voltage_raw & 0xFF
+                b[5] = (inv_voltage_raw >> 8) & 0xFF
+
+            # Inverter current: bytes 6-7, 16-bit little-endian signed, 1 bit per 0.1A
+            if "INVERTER_CURRENT" in signal_values:
+                inv_current = signal_values["INVERTER_CURRENT"]
+                inv_current_raw = max(-32768, min(32767, int(inv_current / 0.1)))
+                # Convert to unsigned 16-bit
+                inv_current_unsigned = (inv_current_raw + 0x8000) % 0x10000
+                b[6] = inv_current_unsigned & 0xFF
+                b[7] = (inv_current_unsigned >> 8) & 0xFF
+
+            # Convert to hex string
+            hex_string = bytes(b).hex(' ').upper()
+
+            # Update the hex input field
+            # Check if it's in pcu_inputs dictionary
+            if hasattr(self, 'pcu_inputs') and frame_id in self.pcu_inputs:
+                input_field = self.pcu_inputs[frame_id]
+                input_field.setText(hex_string)
+                print(f"Updated PCU Power frame {frame_id:03X} hex payload: {hex_string}")
+            else:
+                # Fallback: try attribute name
+                input_attr = f"input_{frame_id:x}"
+                if hasattr(self, input_attr):
+                    input_field = getattr(self, input_attr)
+                    input_field.setText(hex_string)
+                    print(f"Updated PCU Power frame {frame_id:03X} hex payload: {hex_string}")
+                else:
+                    print(f"Warning: No input field found for frame {frame_id:03X}")
+
+        except Exception as e:
+            print(f"Error encoding PCU Power frame {frame_id:03X}: {e}")
+            import traceback
+            traceback.print_exc()
+
     def clear_modified_values(self):
-        """Clear all user-modified table values for PDU stat"""
+        """Clear all user-modified table values for PDU stat and PCU"""
         if 0x580 in self.modified_signals:
             self.modified_signals[0x580] = {}
             print("Cleared all modified PDU stat values")
-            # Force GUI update
-            self.update_gui()
+        
+        # Clear PCU modified values
+        for fid in PCU_FRAMES:
+            if fid in self.modified_signals:
+                self.modified_signals[fid] = {}
+        print("Cleared all modified PCU stat values")
+        
+        # Force GUI update
+        self.update_gui()
 
     def toggle_can1(self):
         if self.bus1_connected:
