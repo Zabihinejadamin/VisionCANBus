@@ -159,6 +159,9 @@ class CANMonitor(QMainWindow):
         self.first_fill.update({f"BT{i}": True for i in [1,2,3]})
         self.first_fill["HMI"] = True
 
+        # Store user-modified table values separately from live CAN data
+        self.modified_signals = {id_: {} for id_ in set(all_ids)}
+
         self.init_ui()
         self.gui_timer = QTimer()
         self.gui_timer.timeout.connect(self.update_gui)
@@ -292,6 +295,16 @@ class CANMonitor(QMainWindow):
         self.raw_log.setReadOnly(True)
         self.raw_log.setMaximumHeight(120)
         self.raw_log.setStyleSheet("font-family: Consolas; font-size: 10px;")
+        # Add control buttons for modified values
+        controls_layout = QHBoxLayout()
+        self.clear_modified_btn = QPushButton("Clear Modified PDU Values")
+        self.clear_modified_btn.clicked.connect(self.clear_modified_values)
+        self.clear_modified_btn.setStyleSheet("background:#ff9800;color:white;font-weight:bold;")
+        controls_layout.addWidget(self.clear_modified_btn)
+
+        controls_layout.addStretch()
+        layout.addLayout(controls_layout)
+
         layout.addWidget(QLabel("Raw CAN Log (last 8 frames):"))
         layout.addWidget(self.raw_log)
 
@@ -1318,15 +1331,48 @@ class CANMonitor(QMainWindow):
             items = list(self.signals.get(fid, {}).items())
             table.setRowCount(len(items))
             for r, (name, d) in enumerate(items):
-                for c, val in enumerate([name, d.get("d",""), d.get("u",""), f"{d.get('t',0):.3f}"]):
+                # For PDU stat (0x580), use modified value if available, otherwise use live CAN data
+                if fid == 0x580:  # PDU Stat frame
+                    modified_data = self.modified_signals.get(fid, {}).get(name)
+                    if modified_data:
+                        display_val = modified_data.get("d", d.get("d",""))
+                        is_modified = True
+                    else:
+                        display_val = d.get("d","")
+                        is_modified = False
+                else:
+                    display_val = d.get("d","")
+                    is_modified = False
+
+                for c, val in enumerate([name, display_val, d.get("u",""), f"{d.get('t',0):.3f}"]):
                     item = table.item(r, c)
                     if not item:
-                        table.setItem(r, c, QTableWidgetItem(val))
+                        item = QTableWidgetItem(val)
+                        table.setItem(r, c, item)
+                        # Make the value column (column 1) editable for PDU stat
+                        if c == 1 and fid == 0x580:
+                            item.setFlags(item.flags() | Qt.ItemIsEditable)
+                        # Highlight modified values
+                        if is_modified and c == 1:
+                            item.setBackground(Qt.yellow)
                     else:
-                        item.setText(val)
+                        # Only update if not currently being edited by user
+                        if not table.isPersistentEditorOpen(item):
+                            item.setText(val)
+                            # Update background color
+                            if is_modified and c == 1:
+                                item.setBackground(Qt.yellow)
+                            elif c == 1 and fid == 0x580:
+                                item.setBackground(Qt.white)
+
             if self.first_fill.get(fid, False):
                 table.resizeColumnsToContents()
                 self.first_fill[fid] = False
+
+            # Connect item changed signal for PDU stat table
+            if fid == 0x580 and not hasattr(table, '_item_changed_connected'):
+                table.itemChanged.connect(lambda item, f=fid: self.on_table_item_changed(item, f))
+                table._item_changed_connected = True
 
         # Battery tabs (merged view)
         for idx, frames in [(1,BAT1_FRAMES),(2,BAT2_FRAMES),(3,BAT3_FRAMES)]:
@@ -1390,6 +1436,132 @@ class CANMonitor(QMainWindow):
         can2_status = "CONNECTED" if self.bus2_connected and self.error_count == 0 else f"NOISE: {self.error_count}"
         self.status_label2.setText(f"CAN2: {can2_status}")
         self.status_label2.setStyleSheet("color:green;" if self.bus2_connected and self.error_count == 0 else "color:orange;" if self.bus2_connected else "color:#d32f2f;")
+
+    def on_table_item_changed(self, item, frame_id):
+        """Handle changes to table items for editable frames"""
+        if item.column() != 1 or frame_id != 0x580:  # Only handle value column changes for PDU stat
+            return
+
+        # Get the signal name from the same row, name column
+        name_item = item.tableWidget().item(item.row(), 0)
+        if not name_item:
+            return
+
+        signal_name = name_item.text()
+        new_value = item.text()
+
+        print(f"PDU Stat value changed: {signal_name} = {new_value}")
+
+        # Store the modified value
+        if frame_id not in self.modified_signals:
+            self.modified_signals[frame_id] = {}
+        
+        # Get original signal data to preserve value type
+        original_sig = self.signals.get(frame_id, {}).get(signal_name, {})
+        
+        # Try to parse the new value to the same type as original
+        try:
+            # Get original value type
+            if "v" in original_sig:
+                original_val = original_sig["v"]
+                # Try to convert new_value to same type
+                if isinstance(original_val, bool):
+                    # Handle boolean values
+                    parsed_val = new_value.lower() in ["yes", "true", "1", "on"]
+                elif isinstance(original_val, float):
+                    clean_val = new_value.replace("°C", "").replace("V", "").replace("A", "").replace("%", "").strip()
+                    parsed_val = float(clean_val) if clean_val else 0.0
+                elif isinstance(original_val, int):
+                    clean_val = new_value.replace("°C", "").replace("V", "").replace("A", "").replace("%", "").strip()
+                    parsed_val = int(float(clean_val)) if clean_val else 0
+                else:
+                    # Keep as string for enum types
+                    parsed_val = new_value
+            else:
+                # Try to infer type from display value
+                clean_val = new_value.replace("°C", "").replace("V", "").replace("A", "").replace("%", "").strip()
+                if clean_val.lower() in ["yes", "no", "true", "false"]:
+                    parsed_val = clean_val.lower() in ["yes", "true"]
+                elif "." in clean_val:
+                    parsed_val = float(clean_val)
+                else:
+                    parsed_val = int(clean_val) if clean_val else 0
+        except (ValueError, AttributeError):
+            # If parsing fails, try to use original value
+            parsed_val = original_sig.get("v", 0)
+
+        self.modified_signals[frame_id][signal_name] = {
+            "d": new_value,  # Display value
+            "v": parsed_val,  # Parsed value for encoding
+            "u": original_sig.get("u", ""),  # Unit
+            "t": time.time()
+        }
+
+        # Update hex payload for PDU stat
+        self.update_pdu_hex_from_table(frame_id)
+
+    def update_pdu_hex_from_table(self, frame_id):
+        """Update hex payload for PDU stat when table values change"""
+        if frame_id != 0x580:
+            return
+
+        try:
+            # Get DBC frame ID for encoding
+            dbc_id = self.HEX_TO_DBC_ID.get(frame_id)
+            if dbc_id is None:
+                print(f"No DBC ID found for frame {frame_id}")
+                return
+
+            # Collect all signal values (use modified if available, otherwise use live)
+            signal_values = {}
+            for sig_name, sig_data in self.signals.get(frame_id, {}).items():
+                # Check if this signal has been modified
+                modified = self.modified_signals.get(frame_id, {}).get(sig_name)
+                if modified and "v" in modified:
+                    # Use modified parsed value
+                    signal_values[sig_name] = modified["v"]
+                elif "v" in sig_data:
+                    # Use live value
+                    signal_values[sig_name] = sig_data["v"]
+                else:
+                    # Fallback: try to parse display value
+                    display_val = modified.get("d", "") if modified else sig_data.get("d", "")
+                    try:
+                        clean_val = display_val.replace("°C", "").replace("V", "").replace("A", "").replace("%", "").strip()
+                        if "." in clean_val:
+                            signal_values[sig_name] = float(clean_val)
+                        else:
+                            signal_values[sig_name] = int(clean_val) if clean_val else 0
+                    except (ValueError, AttributeError):
+                        signal_values[sig_name] = 0
+
+            # Encode the message using cantools
+            encoded_data = self.db.encode_message(dbc_id, signal_values)
+            
+            # Convert to hex string
+            hex_string = encoded_data.hex(' ').upper()
+
+            # Update the hex input field
+            input_attr = f"input_{frame_id:x}"
+            if hasattr(self, input_attr):
+                input_field = getattr(self, input_attr)
+                input_field.setText(hex_string)
+                print(f"Updated PDU hex payload: {hex_string}")
+            else:
+                print(f"Warning: No input field found for frame {frame_id} (attribute: {input_attr})")
+
+        except Exception as e:
+            print(f"Error updating PDU hex from table: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def clear_modified_values(self):
+        """Clear all user-modified table values for PDU stat"""
+        if 0x580 in self.modified_signals:
+            self.modified_signals[0x580] = {}
+            print("Cleared all modified PDU stat values")
+            # Force GUI update
+            self.update_gui()
 
     def toggle_can1(self):
         if self.bus1_connected:
