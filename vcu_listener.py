@@ -297,7 +297,7 @@ class CANMonitor(QMainWindow):
         self.raw_log.setStyleSheet("font-family: Consolas; font-size: 10px;")
         # Add control buttons for modified values
         controls_layout = QHBoxLayout()
-        self.clear_modified_btn = QPushButton("Clear Modified Values (PDU & PCU)")
+        self.clear_modified_btn = QPushButton("Clear Modified Values (PDU, PCU & CCU)")
         self.clear_modified_btn.clicked.connect(self.clear_modified_values)
         self.clear_modified_btn.setStyleSheet("background:#ff9800;color:white;font-weight:bold;")
         controls_layout.addWidget(self.clear_modified_btn)
@@ -409,6 +409,45 @@ class CANMonitor(QMainWindow):
             "Charging_Current": {"d": f"{current:.1f}", "u": "A"},
             "DC_Bus_Voltage": {"d": f"{voltage:.1f}", "u": "V"},
             "Charger_Temperature": {"d": f"{temperature:+}", "u": "°C"},
+        }
+
+    def decode_ccu_stat(self, data):
+        if len(data) < 8: return {}
+        b = data
+
+        # CCU_COOL_IN: 8-bit, scale 1, offset -40, unit Celcius
+        cool_in = b[0] - 40
+
+        # CCU_COOL_OUT: 8-bit, scale 1, offset -40, unit Celcius
+        cool_out = b[1] - 40
+
+        # CCU_GLYCOL_FLOW: 8-bit, scale 0.1, offset 0, unit L/min
+        glycol_flow = b[2] * 0.1
+
+        # CCU_GLYCOL_THROTTLE: 8-bit, scale 1, offset 0, unit %
+        glycol_throttle = b[3]
+
+        # CCU_12V_BAT: 8-bit, scale 1, offset 0, unit %
+        bat_12v = b[4]
+
+        # CCU_ZCU_CURRENT: 8-bit, scale 0.2, offset 0, unit A
+        zcu_current = b[5] * 0.2
+
+        # CCU_ZCU_TEMP: 8-bit, scale 1, offset -40, unit Celcius
+        zcu_temp = b[6] - 40
+
+        # CCU_ERROR_CODES: 8-bit, scale 1, offset 0, unit ""
+        error_codes = b[7]
+
+        return {
+            "CCU_COOL_IN": {"d": f"{cool_in:+.0f}", "u": "Celcius", "v": cool_in},
+            "CCU_COOL_OUT": {"d": f"{cool_out:+.0f}", "u": "Celcius", "v": cool_out},
+            "CCU_GLYCOL_FLOW": {"d": f"{glycol_flow:.1f}", "u": "L/min", "v": glycol_flow},
+            "CCU_GLYCOL_THROTTLE": {"d": f"{glycol_throttle:.0f}", "u": "%", "v": glycol_throttle},
+            "CCU_12V_BAT": {"d": f"{bat_12v:.0f}", "u": "%", "v": bat_12v},
+            "CCU_ZCU_CURRENT": {"d": f"{zcu_current:.1f}", "u": "A", "v": zcu_current},
+            "CCU_ZCU_TEMP": {"d": f"{zcu_temp:+.0f}", "u": "Celcius", "v": zcu_temp},
+            "CCU_ERROR_CODES": {"d": f"{error_codes:.0f}", "u": "", "v": error_codes},
         }
 
     def decode_temperature_frame(self, data):
@@ -1243,6 +1282,8 @@ class CANMonitor(QMainWindow):
             decoded_signals = self.decode_dc12_comm(msg.data)
         elif fid == ID_DC12_STAT:
             decoded_signals = self.decode_dc12_stat(msg.data)
+        elif fid == ID_CCU_STATUS:
+            decoded_signals = self.decode_ccu_stat(msg.data)
         elif fid == ID_TEMP_FRAME:
             decoded_signals = self.decode_temperature_frame(msg.data)
         elif fid == ID_VOLT_FRAME:
@@ -1336,8 +1377,8 @@ class CANMonitor(QMainWindow):
             items = list(self.signals.get(fid, {}).items())
             table.setRowCount(len(items))
             for r, (name, d) in enumerate(items):
-                # For PDU stat (0x580), use modified value if available, otherwise use live CAN data
-                if fid == 0x580:  # PDU Stat frame
+                # For PDU stat (0x580) and CCU stat (0x600), use modified value if available, otherwise use live CAN data
+                if fid == 0x580 or fid == 0x600:  # PDU Stat or CCU Stat frame
                     modified_data = self.modified_signals.get(fid, {}).get(name)
                     if modified_data:
                         display_val = modified_data.get("d", d.get("d",""))
@@ -1354,8 +1395,8 @@ class CANMonitor(QMainWindow):
                     if not item:
                         item = QTableWidgetItem(val)
                         table.setItem(r, c, item)
-                        # Make the value column (column 1) editable for PDU stat
-                        if c == 1 and fid == 0x580:
+                        # Make the value column (column 1) editable for PDU stat and CCU stat
+                        if c == 1 and (fid == 0x580 or fid == 0x600):
                             item.setFlags(item.flags() | Qt.ItemIsEditable)
                         # Highlight modified values
                         if is_modified and c == 1:
@@ -1367,15 +1408,15 @@ class CANMonitor(QMainWindow):
                             # Update background color
                             if is_modified and c == 1:
                                 item.setBackground(Qt.yellow)
-                            elif c == 1 and fid == 0x580:
+                            elif c == 1 and (fid == 0x580 or fid == 0x600):
                                 item.setBackground(Qt.white)
 
             if self.first_fill.get(fid, False):
                 table.resizeColumnsToContents()
                 self.first_fill[fid] = False
 
-            # Connect item changed signal for PDU stat table
-            if fid == 0x580 and not hasattr(table, '_item_changed_connected'):
+            # Connect item changed signal for PDU stat and CCU stat tables
+            if (fid == 0x580 or fid == 0x600) and not hasattr(table, '_item_changed_connected'):
                 table.itemChanged.connect(lambda item, f=fid: self.on_table_item_changed(item, f))
                 table._item_changed_connected = True
 
@@ -1480,7 +1521,7 @@ class CANMonitor(QMainWindow):
 
     def on_table_item_changed(self, item, frame_id):
         """Handle changes to table items for editable frames"""
-        if item.column() != 1 or frame_id != 0x580:  # Only handle value column changes for PDU stat
+        if item.column() != 1 or (frame_id != 0x580 and frame_id != 0x600):  # Only handle value column changes for PDU stat and CCU stat
             return
 
         # Get the signal name from the same row, name column
@@ -1491,7 +1532,8 @@ class CANMonitor(QMainWindow):
         signal_name = name_item.text()
         new_value = item.text()
 
-        print(f"PDU Stat value changed: {signal_name} = {new_value}")
+        frame_name = "PDU Stat" if frame_id == 0x580 else "CCU Stat"
+        print(f"{frame_name} value changed: {signal_name} = {new_value}")
 
         # Store the modified value
         if frame_id not in self.modified_signals:
@@ -1510,17 +1552,17 @@ class CANMonitor(QMainWindow):
                     # Handle boolean values
                     parsed_val = new_value.lower() in ["yes", "true", "1", "on"]
                 elif isinstance(original_val, float):
-                    clean_val = new_value.replace("°C", "").replace("V", "").replace("A", "").replace("%", "").strip()
+                    clean_val = new_value.replace("°C", "").replace("V", "").replace("A", "").replace("%", "").replace("Celcius", "").replace("L/min", "").strip()
                     parsed_val = float(clean_val) if clean_val else 0.0
                 elif isinstance(original_val, int):
-                    clean_val = new_value.replace("°C", "").replace("V", "").replace("A", "").replace("%", "").strip()
+                    clean_val = new_value.replace("°C", "").replace("V", "").replace("A", "").replace("%", "").replace("Celcius", "").replace("L/min", "").strip()
                     parsed_val = int(float(clean_val)) if clean_val else 0
                 else:
                     # Keep as string for enum types
                     parsed_val = new_value
             else:
                 # Try to infer type from display value
-                clean_val = new_value.replace("°C", "").replace("V", "").replace("A", "").replace("%", "").strip()
+                clean_val = new_value.replace("°C", "").replace("V", "").replace("A", "").replace("%", "").replace("Celcius", "").replace("L/min", "").strip()
                 if clean_val.lower() in ["yes", "no", "true", "false"]:
                     parsed_val = clean_val.lower() in ["yes", "true"]
                 elif "." in clean_val:
@@ -1538,8 +1580,93 @@ class CANMonitor(QMainWindow):
             "t": time.time()
         }
 
-        # Update hex payload for PDU stat
-        self.update_pdu_hex_from_table(frame_id)
+        # Update hex payload for PDU stat or CCU stat
+        if frame_id == 0x580:
+            self.update_pdu_hex_from_table(frame_id)
+        elif frame_id == 0x600:
+            self.update_ccu_hex_from_table(frame_id)
+
+    def update_ccu_hex_from_table(self, frame_id):
+        """Update hex payload for CCU stat when table values change"""
+        if frame_id != 0x600:
+            return
+
+        try:
+            b = [0] * 8
+
+            # Collect all signal values (use modified if available, otherwise use live)
+            signal_values = {}
+            for sig_name, sig_data in self.signals.get(frame_id, {}).items():
+                modified = self.modified_signals.get(frame_id, {}).get(sig_name)
+                if modified and "v" in modified:
+                    signal_values[sig_name] = modified["v"]
+                elif "v" in sig_data:
+                    signal_values[sig_name] = sig_data["v"]
+                else:
+                    # Parse display value
+                    display_val = modified.get("d", "") if modified else sig_data.get("d", "")
+                    try:
+                        clean_val = display_val.replace("Celcius", "").replace("L/min", "").replace("A", "").replace("%", "").strip()
+                        signal_values[sig_name] = float(clean_val) if "." in clean_val else int(clean_val) if clean_val else 0
+                    except (ValueError, AttributeError):
+                        signal_values[sig_name] = 0
+
+            # CCU_COOL_IN: byte 0, scale 1, offset -40
+            if "CCU_COOL_IN" in signal_values:
+                cool_in = signal_values["CCU_COOL_IN"]
+                b[0] = max(0, min(255, int(cool_in + 40)))
+
+            # CCU_COOL_OUT: byte 1, scale 1, offset -40
+            if "CCU_COOL_OUT" in signal_values:
+                cool_out = signal_values["CCU_COOL_OUT"]
+                b[1] = max(0, min(255, int(cool_out + 40)))
+
+            # CCU_GLYCOL_FLOW: byte 2, scale 0.1, offset 0
+            if "CCU_GLYCOL_FLOW" in signal_values:
+                glycol_flow = signal_values["CCU_GLYCOL_FLOW"]
+                b[2] = max(0, min(255, int(glycol_flow / 0.1)))
+
+            # CCU_GLYCOL_THROTTLE: byte 3, scale 1, offset 0
+            if "CCU_GLYCOL_THROTTLE" in signal_values:
+                glycol_throttle = signal_values["CCU_GLYCOL_THROTTLE"]
+                b[3] = max(0, min(255, int(glycol_throttle)))
+
+            # CCU_12V_BAT: byte 4, scale 1, offset 0
+            if "CCU_12V_BAT" in signal_values:
+                bat_12v = signal_values["CCU_12V_BAT"]
+                b[4] = max(0, min(255, int(bat_12v)))
+
+            # CCU_ZCU_CURRENT: byte 5, scale 0.2, offset 0
+            if "CCU_ZCU_CURRENT" in signal_values:
+                zcu_current = signal_values["CCU_ZCU_CURRENT"]
+                b[5] = max(0, min(255, int(zcu_current / 0.2)))
+
+            # CCU_ZCU_TEMP: byte 6, scale 1, offset -40
+            if "CCU_ZCU_TEMP" in signal_values:
+                zcu_temp = signal_values["CCU_ZCU_TEMP"]
+                b[6] = max(0, min(255, int(zcu_temp + 40)))
+
+            # CCU_ERROR_CODES: byte 7, scale 1, offset 0
+            if "CCU_ERROR_CODES" in signal_values:
+                error_codes = signal_values["CCU_ERROR_CODES"]
+                b[7] = max(0, min(255, int(error_codes)))
+
+            # Convert to hex string
+            hex_string = ' '.join(f"{x:02X}" for x in b)
+
+            # Update the hex input field
+            input_attr = f"input_{frame_id:x}"
+            if hasattr(self, input_attr):
+                input_field = getattr(self, input_attr)
+                input_field.setText(hex_string)
+                print(f"Updated CCU hex payload: {hex_string}")
+            else:
+                print(f"Warning: No input field found for frame {frame_id} (attribute: {input_attr})")
+
+        except Exception as e:
+            print(f"Error updating CCU hex from table: {e}")
+            import traceback
+            traceback.print_exc()
 
     def update_pdu_hex_from_table(self, frame_id):
         """Update hex payload for PDU stat when table values change"""
@@ -2034,7 +2161,7 @@ class CANMonitor(QMainWindow):
             traceback.print_exc()
 
     def clear_modified_values(self):
-        """Clear all user-modified table values for PDU stat and PCU"""
+        """Clear all user-modified table values for PDU stat, PCU, and CCU stat"""
         if 0x580 in self.modified_signals:
             self.modified_signals[0x580] = {}
             print("Cleared all modified PDU stat values")
@@ -2044,6 +2171,11 @@ class CANMonitor(QMainWindow):
             if fid in self.modified_signals:
                 self.modified_signals[fid] = {}
         print("Cleared all modified PCU stat values")
+        
+        # Clear CCU stat modified values
+        if 0x600 in self.modified_signals:
+            self.modified_signals[0x600] = {}
+            print("Cleared all modified CCU stat values")
         
         # Force GUI update
         self.update_gui()
