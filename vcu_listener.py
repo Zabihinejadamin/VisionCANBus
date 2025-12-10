@@ -225,27 +225,7 @@ class CANMonitor(QMainWindow):
         self.create_emulator_tab(0x607, "0x607 – CCU/ZCU Cmd", "CCU/ZCU Command", "01 00 00 00 00 00 00 00")
         self.create_emulator_tab(0x4F0, "0x4F0 – VCU→BMS", "VCU to BMS", "00 01 00 01 00 00 00 00",
                                  [("Idle","00 00 00 00 00 00 00 00"), ("Precharge","02 00 00 00 00 00 00 00"), ("Close","01 00 00 00 00 00 00 00")])
-        self.create_emulator_tab(0x580, "PDU Stat", "PDU Relays", "99 00 00 99 04 00 00 F3",
-                                 [("All OFF","00 00 00 00 00 00 00 00"), ("Main+Pre","03 00 00 00 00 00 00 00"), ("All ON","FF FF FF FF FF FF FF FF")])
-        self.create_emulator_tab(0x600, "CCU stat", "CCU Stat", "3A 39 50 54 8D 00 3C 00")
-        self.create_pcu_tab_with_emulator("PCU stat", PCU_FRAMES)
-        self.create_emulator_tab(0x72E, "ZCU stat", "ZCU Pump Stat", "28 00 00 00 00 3C 08 00",
-                                 [("OFF","00 00 00 00 00 00 00 00"), ("50%","01 32 00 00 00 00 00 00"), ("100%","01 64 00 00 00 00 00 00")])
-
-        self.create_emulator_tab(
-            can_id=ID_HV_CHARGER_STATUS,
-            tab_name="HVC Stat",
-            title="HV Charger Feedback (FULLY DECODED)",
-            default_payload="1B 01 00 80 00 00 43 00",
-            presets=[
-                ("No Comm", "00 00 00 00 00 00 00 00"),
-                ("Ready", "00 00 00 00 00 28 00 00"),
-                ("400V 150A", "90 0F DC 05 01 64 00 00"),
-                ("550V 100A", "56 10 3E 08 01 5A 00 00"),
-                ("Done", "90 0F 00 00 00 78 00 00"),
-            ]
-        )
-
+        
         self.create_emulator_tab(
             can_id=ID_HV_CHARGER_CMD,
             tab_name="HVC CMD",
@@ -273,6 +253,27 @@ class CANMonitor(QMainWindow):
             ]
         )
 
+        self.create_emulator_tab(0x580, "PDU Stat", "PDU Relays", "99 00 00 99 04 00 00 F3",
+                                 [("All OFF","00 00 00 00 00 00 00 00"), ("Main+Pre","03 00 00 00 00 00 00 00"), ("All ON","FF FF FF FF FF FF FF FF")])
+        self.create_emulator_tab(0x600, "CCU stat", "CCU Stat", "3A 39 50 54 8D 00 3C 00")
+        self.create_pcu_tab_with_emulator("PCU stat", PCU_FRAMES)
+        self.create_emulator_tab(0x72E, "ZCU stat", "ZCU Pump Stat", "28 00 00 00 00 3C 08 00",
+                                 [("OFF","00 00 00 00 00 00 00 00"), ("50%","01 32 00 00 00 00 00 00"), ("100%","01 64 00 00 00 00 00 00")])
+
+        self.create_emulator_tab(
+            can_id=ID_HV_CHARGER_STATUS,
+            tab_name="HVC Stat",
+            title="HV Charger Feedback (FULLY DECODED)",
+            default_payload="1B 01 00 80 00 00 43 00",
+            presets=[
+                ("No Comm", "00 00 00 00 00 00 00 00"),
+                ("Ready", "00 00 00 00 00 28 00 00"),
+                ("400V 150A", "90 0F DC 05 01 64 00 00"),
+                ("550V 100A", "56 10 3E 08 01 5A 00 00"),
+                ("Done", "90 0F 00 00 00 78 00 00"),
+            ]
+        )
+
         self.create_emulator_tab(
             can_id=ID_DC12_STAT,
             tab_name="DC12 Stat",
@@ -297,7 +298,7 @@ class CANMonitor(QMainWindow):
         self.raw_log.setStyleSheet("font-family: Consolas; font-size: 10px;")
         # Add control buttons for modified values
         controls_layout = QHBoxLayout()
-        self.clear_modified_btn = QPushButton("Clear Modified Values (PDU, PCU & CCU)")
+        self.clear_modified_btn = QPushButton("Clear Modified Values (PDU, PCU, CCU, ZCU, HVC, DC12 & TCU)")
         self.clear_modified_btn.clicked.connect(self.clear_modified_values)
         self.clear_modified_btn.setStyleSheet("background:#ff9800;color:white;font-weight:bold;")
         controls_layout.addWidget(self.clear_modified_btn)
@@ -374,13 +375,14 @@ class CANMonitor(QMainWindow):
         b = data
         voltage = (b[0] * 256 + b[1]) / 10.0
         current = (b[2] * 256 + b[3]) / 10.0
-        status = "State_A (Charging)" if (b[4] & 0x01) else "State_C (Ready/Finished)"
+        status_bit = bool(b[4] & 0x01)
+        status = "State_A (Charging)" if status_bit else "State_C (Ready/Finished)"
         temp = b[5] - 40
         return {
-            "HV_Charger_Voltage": {"d": f"{voltage:.1f}", "u": "V"},
-            "HV_Charger_Current": {"d": f"{current:.1f}", "u": "A"},
-            "HV_Charger_Status": {"d": status, "u": ""},
-            "HV_Charger_Temp": {"d": f"{temp:+.0f}", "u": "°C"},
+            "HV_Charger_Voltage": {"d": f"{voltage:.1f}", "u": "V", "v": voltage},
+            "HV_Charger_Current": {"d": f"{current:.1f}", "u": "A", "v": current},
+            "HV_Charger_Status": {"d": status, "u": "", "v": status_bit},
+            "HV_Charger_Temp": {"d": f"{temp:+.0f}", "u": "°C", "v": temp},
         }
 
     def decode_dc12_comm(self, data):
@@ -400,15 +402,16 @@ class CANMonitor(QMainWindow):
     def decode_dc12_stat(self, data):
         if len(data) < 8: return {}
         b = data
-        status = "State_A" if b[1] == 1 else "State_C"
+        status_bit = bool(b[1] == 1)
+        status = "State_A" if status_bit else "State_C"
         current = b[3] * 0.1  # Charging current in A, 1 bit per 0.1A
         voltage = b[5] * 0.1  # DC bus voltage in V, 1 bit per 0.1V
         temperature = b[7] - 40  # Temperature in °C, offset by -40
         return {
-            "Charger_Status": {"d": status, "u": ""},
-            "Charging_Current": {"d": f"{current:.1f}", "u": "A"},
-            "DC_Bus_Voltage": {"d": f"{voltage:.1f}", "u": "V"},
-            "Charger_Temperature": {"d": f"{temperature:+}", "u": "°C"},
+            "Charger_Status": {"d": status, "u": "", "v": status_bit},
+            "Charging_Current": {"d": f"{current:.1f}", "u": "A", "v": current},
+            "DC_Bus_Voltage": {"d": f"{voltage:.1f}", "u": "V", "v": voltage},
+            "Charger_Temperature": {"d": f"{temperature:+}", "u": "°C", "v": temperature},
         }
 
     def decode_ccu_stat(self, data):
@@ -448,6 +451,37 @@ class CANMonitor(QMainWindow):
             "CCU_ZCU_CURRENT": {"d": f"{zcu_current:.1f}", "u": "A", "v": zcu_current},
             "CCU_ZCU_TEMP": {"d": f"{zcu_temp:+.0f}", "u": "Celcius", "v": zcu_temp},
             "CCU_ERROR_CODES": {"d": f"{error_codes:.0f}", "u": "", "v": error_codes},
+        }
+
+    def decode_zcu_stat(self, data):
+        if len(data) < 8: return {}
+        b = data
+
+        # Current: 8-bit, scale 0.2, offset 0, unit A
+        current = b[0] * 0.2
+
+        # Temp_CPU: 8-bit, scale 1, offset 40, unit °C
+        temp_cpu = b[1] - 40
+
+        # Temp_Mos: 8-bit, scale 1, offset 40, unit °C
+        temp_mos = b[2] - 40
+
+        # Voltage: 8-bit, scale 0.1, offset 0, unit V
+        voltage = b[3] * 0.1
+
+        # Power: 16-bit little-endian, scale 0.1, offset 0, unit W
+        power = ((b[5] << 8) | b[4]) * 0.1
+
+        # Status: 8-bit, scale 1, offset 0, unit ""
+        status = b[6]
+
+        return {
+            "Current": {"d": f"{current:.1f}", "u": "A", "v": current},
+            "Temp_CPU": {"d": f"{temp_cpu:+.0f}", "u": "°C", "v": temp_cpu},
+            "Temp_Mos": {"d": f"{temp_mos:+.0f}", "u": "°C", "v": temp_mos},
+            "Voltage": {"d": f"{voltage:.1f}", "u": "V", "v": voltage},
+            "Power": {"d": f"{power:.1f}", "u": "W", "v": power},
+            "Status": {"d": f"{status:.0f}", "u": "", "v": status},
         }
 
     def decode_temperature_frame(self, data):
@@ -518,30 +552,48 @@ class CANMonitor(QMainWindow):
 
         # Status: bit field
         status = b[1]
-        limp_mode = "Yes" if status & 0x01 else "No"
-        limited_range = "Yes" if status & 0x02 else "No"
+        limp_mode_bit = bool(status & 0x01)
+        limited_range_bit = bool(status & 0x02)
+        limp_mode = "Yes" if limp_mode_bit else "No"
+        limited_range = "Yes" if limited_range_bit else "No"
 
         # TCU RND: bit field
         tcu_rnd = b[2]
-        tcu_validated = "Yes" if tcu_rnd & 0x01 else "No"
-        tcu_reverse = "Yes" if tcu_rnd & 0x02 else "No"
-        tcu_neutral = "Yes" if tcu_rnd & 0x04 else "No"
-        tcu_drive = "Yes" if tcu_rnd & 0x08 else "No"
-        tcu_eco_sport = "Yes" if tcu_rnd & 0x10 else "No"
-        tcu_dock = "Yes" if tcu_rnd & 0x20 else "No"
-        tcu_enabled = "Yes" if tcu_rnd & 0x40 else "No"
-        tcu_error_kill = "Yes" if tcu_rnd & 0x80 else "No"
+        tcu_validated_bit = bool(tcu_rnd & 0x01)
+        tcu_reverse_bit = bool(tcu_rnd & 0x02)
+        tcu_neutral_bit = bool(tcu_rnd & 0x04)
+        tcu_drive_bit = bool(tcu_rnd & 0x08)
+        tcu_eco_sport_bit = bool(tcu_rnd & 0x10)
+        tcu_dock_bit = bool(tcu_rnd & 0x20)
+        # TCU_ENABLED removed - duplicate of TCU_ENABLE from TCU input frame
+        tcu_error_kill_bit = bool(tcu_rnd & 0x80)
+        tcu_validated = "Yes" if tcu_validated_bit else "No"
+        tcu_reverse = "Yes" if tcu_reverse_bit else "No"
+        tcu_neutral = "Yes" if tcu_neutral_bit else "No"
+        tcu_drive = "Yes" if tcu_drive_bit else "No"
+        tcu_eco_sport = "Yes" if tcu_eco_sport_bit else "No"
+        tcu_dock = "Yes" if tcu_dock_bit else "No"
+        # tcu_enabled removed - duplicate
+        tcu_error_kill = "Yes" if tcu_error_kill_bit else "No"
 
         # PCU RND: similar bit field (assuming same format)
         pcu_rnd = b[3]
-        pcu_validated = "Yes" if pcu_rnd & 0x01 else "No"
-        pcu_reverse = "Yes" if pcu_rnd & 0x02 else "No"
-        pcu_neutral = "Yes" if pcu_rnd & 0x04 else "No"
-        pcu_drive = "Yes" if pcu_rnd & 0x08 else "No"
-        pcu_eco_sport = "Yes" if pcu_rnd & 0x10 else "No"
-        pcu_dock = "Yes" if pcu_rnd & 0x20 else "No"
-        pcu_enabled = "Yes" if pcu_rnd & 0x40 else "No"
-        pcu_error_kill = "Yes" if pcu_rnd & 0x80 else "No"
+        pcu_validated_bit = bool(pcu_rnd & 0x01)
+        pcu_reverse_bit = bool(pcu_rnd & 0x02)
+        pcu_neutral_bit = bool(pcu_rnd & 0x04)
+        pcu_drive_bit = bool(pcu_rnd & 0x08)
+        pcu_eco_sport_bit = bool(pcu_rnd & 0x10)
+        pcu_dock_bit = bool(pcu_rnd & 0x20)
+        pcu_enabled_bit = bool(pcu_rnd & 0x40)
+        pcu_error_kill_bit = bool(pcu_rnd & 0x80)
+        pcu_validated = "Yes" if pcu_validated_bit else "No"
+        pcu_reverse = "Yes" if pcu_reverse_bit else "No"
+        pcu_neutral = "Yes" if pcu_neutral_bit else "No"
+        pcu_drive = "Yes" if pcu_drive_bit else "No"
+        pcu_eco_sport = "Yes" if pcu_eco_sport_bit else "No"
+        pcu_dock = "Yes" if pcu_dock_bit else "No"
+        pcu_enabled = "Yes" if pcu_enabled_bit else "No"
+        pcu_error_kill = "Yes" if pcu_error_kill_bit else "No"
 
         # Trim: 1 bit per %, Range [0,100]
         trim = b[4]
@@ -552,29 +604,29 @@ class CANMonitor(QMainWindow):
         soc = b[7]
 
         return {
-            "Throttle": {"d": f"{throttle:.0f}", "u": "%"},
-            "LIMP_MODE": {"d": limp_mode, "u": ""},
-            "LIMITED_RANGE": {"d": limited_range, "u": ""},
-            "TCU_VALIDATED": {"d": tcu_validated, "u": ""},
-            "TCU_REVERSE": {"d": tcu_reverse, "u": ""},
-            "TCU_NEUTRAL": {"d": tcu_neutral, "u": ""},
-            "TCU_DRIVE": {"d": tcu_drive, "u": ""},
-            "TCU_ECO_SPORT": {"d": tcu_eco_sport, "u": ""},
-            "TCU_DOCK": {"d": tcu_dock, "u": ""},
-            "TCU_ENABLED": {"d": tcu_enabled, "u": ""},
-            "TCU_ERROR_KILL": {"d": tcu_error_kill, "u": ""},
-            "PCU_VALIDATED": {"d": pcu_validated, "u": ""},
-            "PCU_REVERSE": {"d": pcu_reverse, "u": ""},
-            "PCU_NEUTRAL": {"d": pcu_neutral, "u": ""},
-            "PCU_DRIVE": {"d": pcu_drive, "u": ""},
-            "PCU_ECO_SPORT": {"d": pcu_eco_sport, "u": ""},
-            "PCU_DOCK": {"d": pcu_dock, "u": ""},
-            "PCU_ENABLED": {"d": pcu_enabled, "u": ""},
-            "PCU_ERROR_KILL": {"d": pcu_error_kill, "u": ""},
-            "Trim": {"d": f"{trim:.0f}", "u": "%"},
-            "Range": {"d": f"{range_val:.0f}", "u": ""},
-            "Power": {"d": f"{power:.0f}", "u": ""},
-            "SOC": {"d": f"{soc:.0f}", "u": "%"},
+            "Throttle": {"d": f"{throttle:.0f}", "u": "%", "v": throttle},
+            "LIMP_MODE": {"d": limp_mode, "u": "", "v": limp_mode_bit},
+            "LIMITED_RANGE": {"d": limited_range, "u": "", "v": limited_range_bit},
+            "TCU_VALIDATED": {"d": tcu_validated, "u": "", "v": tcu_validated_bit},
+            "TCU_REVERSE": {"d": tcu_reverse, "u": "", "v": tcu_reverse_bit},
+            "TCU_NEUTRAL": {"d": tcu_neutral, "u": "", "v": tcu_neutral_bit},
+            "TCU_DRIVE": {"d": tcu_drive, "u": "", "v": tcu_drive_bit},
+            "TCU_ECO_SPORT": {"d": tcu_eco_sport, "u": "", "v": tcu_eco_sport_bit},
+            "TCU_DOCK": {"d": tcu_dock, "u": "", "v": tcu_dock_bit},
+            # TCU_ENABLED removed - duplicate of TCU_ENABLE from TCU input frame
+            "TCU_ERROR_KILL": {"d": tcu_error_kill, "u": "", "v": tcu_error_kill_bit},
+            "PCU_VALIDATED": {"d": pcu_validated, "u": "", "v": pcu_validated_bit},
+            "PCU_REVERSE": {"d": pcu_reverse, "u": "", "v": pcu_reverse_bit},
+            "PCU_NEUTRAL": {"d": pcu_neutral, "u": "", "v": pcu_neutral_bit},
+            "PCU_DRIVE": {"d": pcu_drive, "u": "", "v": pcu_drive_bit},
+            "PCU_ECO_SPORT": {"d": pcu_eco_sport, "u": "", "v": pcu_eco_sport_bit},
+            "PCU_DOCK": {"d": pcu_dock, "u": "", "v": pcu_dock_bit},
+            "PCU_ENABLED": {"d": pcu_enabled, "u": "", "v": pcu_enabled_bit},
+            "PCU_ERROR_KILL": {"d": pcu_error_kill, "u": "", "v": pcu_error_kill_bit},
+            "Trim": {"d": f"{trim:.0f}", "u": "%", "v": trim},
+            "Range": {"d": f"{range_val:.0f}", "u": "", "v": range_val},
+            "Power": {"d": f"{power:.0f}", "u": "", "v": power},
+            "SOC": {"d": f"{soc:.0f}", "u": "%", "v": soc},
         }
 
     def decode_spdtq_frame(self, data):
@@ -771,9 +823,10 @@ class CANMonitor(QMainWindow):
         if len(data) < 8: return {}
         b = data
         # Enable: Byte 4, bit 2 (1 = TCU is talking, 0 = no TCU or fault)
-        enable = "Yes" if (b[4] & 0x04) else "No"
+        enable_bit = bool(b[4] & 0x04)
+        enable = "Yes" if enable_bit else "No"
         return {
-            "TCU_ENABLE": {"d": enable, "u": ""},
+            "TCU_ENABLE": {"d": enable, "u": "", "v": enable_bit},
         }
 
     def decode_tcu_prnd_frame(self, data):
@@ -789,7 +842,7 @@ class CANMonitor(QMainWindow):
         if prnd_val & 0x10: prnd_status.append("Auto")
         prnd_str = "/".join(prnd_status) if prnd_status else "None"
         return {
-            "TCU_PRND": {"d": prnd_str, "u": ""},
+            "TCU_PRND": {"d": prnd_str, "u": "", "v": prnd_val},
         }
 
     def decode_tcu_throttle_frame(self, data):
@@ -799,7 +852,7 @@ class CANMonitor(QMainWindow):
         throttle_raw = b[1]
         throttle_percent = (throttle_raw / 255.0) * 100.0
         return {
-            "TCU_Throttle": {"d": f"{throttle_percent:.1f}", "u": "%"},
+            "TCU_Throttle": {"d": f"{throttle_percent:.1f}", "u": "%", "v": throttle_percent},
         }
 
     def decode_tcu_trim_frame(self, data):
@@ -807,23 +860,25 @@ class CANMonitor(QMainWindow):
         b = data
         # Trim: Byte 0, bits 0–3 - 0x01 = "+" pressed, 0x02 = "-" pressed, etc.
         trim_bits = b[0] & 0x0F
-        trim_plus = "Yes" if trim_bits & 0x01 else "No"
-        trim_minus = "Yes" if trim_bits & 0x02 else "No"
+        trim_plus_bit = bool(trim_bits & 0x01)
+        trim_minus_bit = bool(trim_bits & 0x02)
+        trim_plus = "Yes" if trim_plus_bit else "No"
+        trim_minus = "Yes" if trim_minus_bit else "No"
         # Other bits could be defined as needed
         return {
-            "TCU_Trim_Plus": {"d": trim_plus, "u": ""},
-            "TCU_Trim_Minus": {"d": trim_minus, "u": ""},
+            "TCU_Trim_Plus": {"d": trim_plus, "u": "", "v": trim_plus_bit},
+            "TCU_Trim_Minus": {"d": trim_minus, "u": "", "v": trim_minus_bit},
         }
 
     def decode_gps_speed_frame(self, data):
         if len(data) < 8: return {}
         b = data
-        # GPS speed: Byte 4 and byte 5
+        # GPS speed: Byte 4 and byte 5 (16-bit little-endian)
         gps_speed_raw = (b[5] << 8) | b[4]
         # Assuming it's in some unit, probably km/h or mph - need to check the scaling
         gps_speed = gps_speed_raw  # Placeholder - may need scaling
         return {
-            "GPS_Speed": {"d": f"{gps_speed:.0f}", "u": "km/h"},  # Adjust unit as needed
+            "GPS_Speed": {"d": f"{gps_speed:.0f}", "u": "km/h", "v": gps_speed},  # Adjust unit as needed
         }
 
     HEX_TO_DBC_ID = {
@@ -1284,6 +1339,8 @@ class CANMonitor(QMainWindow):
             decoded_signals = self.decode_dc12_stat(msg.data)
         elif fid == ID_CCU_STATUS:
             decoded_signals = self.decode_ccu_stat(msg.data)
+        elif fid == ID_ZCU_PUMP:
+            decoded_signals = self.decode_zcu_stat(msg.data)
         elif fid == ID_TEMP_FRAME:
             decoded_signals = self.decode_temperature_frame(msg.data)
         elif fid == ID_VOLT_FRAME:
@@ -1377,8 +1434,9 @@ class CANMonitor(QMainWindow):
             items = list(self.signals.get(fid, {}).items())
             table.setRowCount(len(items))
             for r, (name, d) in enumerate(items):
-                # For PDU stat (0x580) and CCU stat (0x600), use modified value if available, otherwise use live CAN data
-                if fid == 0x580 or fid == 0x600:  # PDU Stat or CCU Stat frame
+                # For editable frames, use modified value if available, otherwise use live CAN data
+                editable_frames = [0x580, 0x600, 0x72E, ID_HV_CHARGER_STATUS, ID_DC12_STAT]
+                if fid in editable_frames:  # PDU Stat, CCU Stat, ZCU Stat, HVC Stat, or DC12 Stat frame
                     modified_data = self.modified_signals.get(fid, {}).get(name)
                     if modified_data:
                         display_val = modified_data.get("d", d.get("d",""))
@@ -1395,8 +1453,8 @@ class CANMonitor(QMainWindow):
                     if not item:
                         item = QTableWidgetItem(val)
                         table.setItem(r, c, item)
-                        # Make the value column (column 1) editable for PDU stat and CCU stat
-                        if c == 1 and (fid == 0x580 or fid == 0x600):
+                        # Make the value column (column 1) editable for editable frames
+                        if c == 1 and fid in editable_frames:
                             item.setFlags(item.flags() | Qt.ItemIsEditable)
                         # Highlight modified values
                         if is_modified and c == 1:
@@ -1408,15 +1466,16 @@ class CANMonitor(QMainWindow):
                             # Update background color
                             if is_modified and c == 1:
                                 item.setBackground(Qt.yellow)
-                            elif c == 1 and (fid == 0x580 or fid == 0x600):
+                            elif c == 1 and fid in editable_frames:
                                 item.setBackground(Qt.white)
 
             if self.first_fill.get(fid, False):
                 table.resizeColumnsToContents()
                 self.first_fill[fid] = False
 
-            # Connect item changed signal for PDU stat and CCU stat tables
-            if (fid == 0x580 or fid == 0x600) and not hasattr(table, '_item_changed_connected'):
+            # Connect item changed signal for editable frames
+            editable_frames = [0x580, 0x600, 0x72E, ID_HV_CHARGER_STATUS, ID_DC12_STAT]
+            if fid in editable_frames and not hasattr(table, '_item_changed_connected'):
                 table.itemChanged.connect(lambda item, f=fid: self.on_table_item_changed(item, f))
                 table._item_changed_connected = True
 
@@ -1491,19 +1550,63 @@ class CANMonitor(QMainWindow):
         # HMI tab (combined temperature, voltage, current, drive, speed/torque, TCU, and GPS frames)
         hmi_frames = [ID_TEMP_FRAME, ID_VOLT_FRAME, ID_CURRENT_FRAME, ID_DRIVE_FRAME, ID_SPDTQ_FRAME,
                       ID_TCU_ENABLE_FRAME, ID_TCU_PRND_FRAME, ID_TCU_THROTTLE_FRAME, ID_TCU_TRIM_FRAME, ID_GPS_SPEED_FRAME]
+        tcu_frames = [ID_TCU_ENABLE_FRAME, ID_TCU_PRND_FRAME, ID_TCU_THROTTLE_FRAME, ID_TCU_TRIM_FRAME, ID_GPS_SPEED_FRAME]
+        editable_hmi_frames = tcu_frames + [ID_DRIVE_FRAME]  # TCU frames + Drive frame (contains TCU RND signals)
         table = self.hmi_tab
-        all_sig = sorted([item for fid in hmi_frames for item in self.signals.get(fid, {}).items()])
-        table.setRowCount(len(all_sig))
-        for r, (name, d) in enumerate(all_sig):
-            for c, val in enumerate([name, d.get("d",""), d.get("u",""), f"{d.get('t',0):.3f}"]):
+        # Collect signals with their frame IDs
+        all_sig_with_fid = []
+        for fid in hmi_frames:
+            for name, d in self.signals.get(fid, {}).items():
+                all_sig_with_fid.append((name, d, fid))
+        all_sig_with_fid.sort(key=lambda x: x[0])  # Sort by signal name
+        
+        table.setRowCount(len(all_sig_with_fid))
+        for r, (name, d, fid) in enumerate(all_sig_with_fid):
+            # For editable frames (TCU frames and Drive frame), use modified value if available, otherwise use live CAN data
+            is_editable_frame = fid in editable_hmi_frames
+            if is_editable_frame:
+                modified_data = self.modified_signals.get(fid, {}).get(name)
+                if modified_data:
+                    display_val = modified_data.get("d", d.get("d",""))
+                    is_modified = True
+                else:
+                    display_val = d.get("d","")
+                    is_modified = False
+            else:
+                display_val = d.get("d","")
+                is_modified = False
+            
+            for c, val in enumerate([name, display_val, d.get("u",""), f"{d.get('t',0):.3f}"]):
                 item = table.item(r, c)
                 if not item:
-                    table.setItem(r, c, QTableWidgetItem(val))
+                    item = QTableWidgetItem(val)
+                    table.setItem(r, c, item)
                 else:
-                    item.setText(val)
+                    # Only update if not currently being edited by user
+                    if not table.isPersistentEditorOpen(item):
+                        item.setText(val)
+                
+                # Store frame_id in item data for editable frames (always set, even if item exists)
+                if is_editable_frame and c == 1:
+                    item.setData(Qt.UserRole, fid)
+                    # Make the value column (column 1) editable for editable frames
+                    item.setFlags(item.flags() | Qt.ItemIsEditable)
+                    # Update background color
+                    if is_modified:
+                        item.setBackground(Qt.yellow)
+                    else:
+                        item.setBackground(Qt.white)
+                elif c == 1 and is_modified:
+                    # Highlight modified values for non-TCU frames too
+                    item.setBackground(Qt.yellow)
         if self.first_fill.get("HMI", False):
             table.resizeColumnsToContents()
             self.first_fill["HMI"] = False
+        
+        # Connect item changed signal for HMI table (TCU frames)
+        if not hasattr(table, '_hmi_item_changed_connected'):
+            table.itemChanged.connect(self.on_hmi_table_item_changed)
+            table._hmi_item_changed_connected = True
 
         self.raw_log.clear()
         for l in lines:
@@ -1521,7 +1624,8 @@ class CANMonitor(QMainWindow):
 
     def on_table_item_changed(self, item, frame_id):
         """Handle changes to table items for editable frames"""
-        if item.column() != 1 or (frame_id != 0x580 and frame_id != 0x600):  # Only handle value column changes for PDU stat and CCU stat
+        editable_frames = [0x580, 0x600, 0x72E, ID_HV_CHARGER_STATUS, ID_DC12_STAT]
+        if item.column() != 1 or frame_id not in editable_frames:
             return
 
         # Get the signal name from the same row, name column
@@ -1532,7 +1636,16 @@ class CANMonitor(QMainWindow):
         signal_name = name_item.text()
         new_value = item.text()
 
-        frame_name = "PDU Stat" if frame_id == 0x580 else "CCU Stat"
+        if frame_id == 0x580:
+            frame_name = "PDU Stat"
+        elif frame_id == 0x600:
+            frame_name = "CCU Stat"
+        elif frame_id == 0x72E:
+            frame_name = "ZCU Stat"
+        elif frame_id == ID_HV_CHARGER_STATUS:
+            frame_name = "HVC Stat"
+        else:
+            frame_name = "DC12 Stat"
         print(f"{frame_name} value changed: {signal_name} = {new_value}")
 
         # Store the modified value
@@ -1552,10 +1665,10 @@ class CANMonitor(QMainWindow):
                     # Handle boolean values
                     parsed_val = new_value.lower() in ["yes", "true", "1", "on"]
                 elif isinstance(original_val, float):
-                    clean_val = new_value.replace("°C", "").replace("V", "").replace("A", "").replace("%", "").replace("Celcius", "").replace("L/min", "").strip()
+                    clean_val = new_value.replace("°C", "").replace("V", "").replace("A", "").replace("%", "").replace("Celcius", "").replace("L/min", "").replace("W", "").strip()
                     parsed_val = float(clean_val) if clean_val else 0.0
                 elif isinstance(original_val, int):
-                    clean_val = new_value.replace("°C", "").replace("V", "").replace("A", "").replace("%", "").replace("Celcius", "").replace("L/min", "").strip()
+                    clean_val = new_value.replace("°C", "").replace("V", "").replace("A", "").replace("%", "").replace("Celcius", "").replace("L/min", "").replace("W", "").strip()
                     parsed_val = int(float(clean_val)) if clean_val else 0
                 else:
                     # Keep as string for enum types
@@ -1580,11 +1693,110 @@ class CANMonitor(QMainWindow):
             "t": time.time()
         }
 
-        # Update hex payload for PDU stat or CCU stat
+        # Update hex payload for editable frames
         if frame_id == 0x580:
             self.update_pdu_hex_from_table(frame_id)
         elif frame_id == 0x600:
             self.update_ccu_hex_from_table(frame_id)
+        elif frame_id == 0x72E:
+            self.update_zcu_hex_from_table(frame_id)
+        elif frame_id == ID_HV_CHARGER_STATUS:
+            self.update_hvc_hex_from_table(frame_id)
+        elif frame_id == ID_DC12_STAT:
+            self.update_dc12_hex_from_table(frame_id)
+        elif frame_id in [ID_TCU_ENABLE_FRAME, ID_TCU_PRND_FRAME, ID_TCU_THROTTLE_FRAME, ID_TCU_TRIM_FRAME, ID_GPS_SPEED_FRAME]:
+            self.update_tcu_hex_from_table(frame_id)
+
+    def on_hmi_table_item_changed(self, item):
+        """Handle changes to HMI table items for TCU frames"""
+        if item.column() != 1:  # Only handle value column changes
+            return
+
+        # Get frame_id from item data
+        frame_id = item.data(Qt.UserRole)
+        editable_frames = [ID_TCU_ENABLE_FRAME, ID_TCU_PRND_FRAME, ID_TCU_THROTTLE_FRAME, ID_TCU_TRIM_FRAME, ID_GPS_SPEED_FRAME, ID_DRIVE_FRAME]
+        if frame_id is None or frame_id not in editable_frames:
+            return
+
+        # Get the signal name from the same row, name column
+        name_item = item.tableWidget().item(item.row(), 0)
+        if not name_item:
+            return
+
+        signal_name = name_item.text()
+        new_value = item.text()
+
+        frame_names = {
+            ID_TCU_ENABLE_FRAME: "TCU Enable",
+            ID_TCU_PRND_FRAME: "TCU PRND",
+            ID_TCU_THROTTLE_FRAME: "TCU Throttle",
+            ID_TCU_TRIM_FRAME: "TCU Trim",
+            ID_GPS_SPEED_FRAME: "GPS Speed",
+            ID_DRIVE_FRAME: "Drive Frame"
+        }
+        frame_name = frame_names.get(frame_id, "TCU")
+        print(f"{frame_name} value changed: {signal_name} = {new_value}")
+
+        # Store the modified value
+        if frame_id not in self.modified_signals:
+            self.modified_signals[frame_id] = {}
+        
+        # Get original signal data to preserve value type
+        original_sig = self.signals.get(frame_id, {}).get(signal_name, {})
+        
+        # Try to parse the new value to the same type as original
+        try:
+            # Get original value type
+            if "v" in original_sig:
+                original_val = original_sig["v"]
+                # Try to convert new_value to same type
+                if isinstance(original_val, bool):
+                    # Handle boolean values
+                    parsed_val = new_value.lower() in ["yes", "true", "1", "on"]
+                elif isinstance(original_val, float):
+                    clean_val = new_value.replace("%", "").replace("km/h", "").replace("mph", "").strip()
+                    parsed_val = float(clean_val) if clean_val else 0.0
+                elif isinstance(original_val, int):
+                    # For PRND, parse the string representation
+                    if signal_name == "TCU_PRND":
+                        prnd_val = 0
+                        if "P" in new_value.upper(): prnd_val |= 0x01
+                        if "R" in new_value.upper(): prnd_val |= 0x02
+                        if "N" in new_value.upper(): prnd_val |= 0x04
+                        if "D" in new_value.upper(): prnd_val |= 0x08
+                        if "AUTO" in new_value.upper(): prnd_val |= 0x10
+                        parsed_val = prnd_val
+                    else:
+                        clean_val = new_value.replace("%", "").replace("km/h", "").replace("mph", "").strip()
+                        parsed_val = int(float(clean_val)) if clean_val else 0
+                else:
+                    # Keep as string for enum types
+                    parsed_val = new_value
+            else:
+                # Try to infer type from display value
+                clean_val = new_value.replace("%", "").strip()
+                if clean_val.lower() in ["yes", "no", "true", "false"]:
+                    parsed_val = clean_val.lower() in ["yes", "true"]
+                elif "." in clean_val:
+                    parsed_val = float(clean_val)
+                else:
+                    parsed_val = int(clean_val) if clean_val else 0
+        except (ValueError, AttributeError):
+            # If parsing fails, try to use original value
+            parsed_val = original_sig.get("v", 0)
+
+        self.modified_signals[frame_id][signal_name] = {
+            "d": new_value,  # Display value
+            "v": parsed_val,  # Parsed value for encoding
+            "u": original_sig.get("u", ""),  # Unit
+            "t": time.time()
+        }
+
+        # Update hex payload for TCU frame or Drive frame
+        if frame_id == ID_DRIVE_FRAME:
+            self.update_drive_hex_from_table(frame_id)
+        else:
+            self.update_tcu_hex_from_table(frame_id)
 
     def update_ccu_hex_from_table(self, frame_id):
         """Update hex payload for CCU stat when table values change"""
@@ -1665,6 +1877,454 @@ class CANMonitor(QMainWindow):
 
         except Exception as e:
             print(f"Error updating CCU hex from table: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def update_zcu_hex_from_table(self, frame_id):
+        """Update hex payload for ZCU stat when table values change"""
+        if frame_id != 0x72E:
+            return
+
+        try:
+            b = [0] * 8
+
+            # Collect all signal values (use modified if available, otherwise use live)
+            signal_values = {}
+            for sig_name, sig_data in self.signals.get(frame_id, {}).items():
+                modified = self.modified_signals.get(frame_id, {}).get(sig_name)
+                if modified and "v" in modified:
+                    signal_values[sig_name] = modified["v"]
+                elif "v" in sig_data:
+                    signal_values[sig_name] = sig_data["v"]
+                else:
+                    # Parse display value
+                    display_val = modified.get("d", "") if modified else sig_data.get("d", "")
+                    try:
+                        clean_val = display_val.replace("°C", "").replace("V", "").replace("A", "").replace("W", "").strip()
+                        signal_values[sig_name] = float(clean_val) if "." in clean_val else int(clean_val) if clean_val else 0
+                    except (ValueError, AttributeError):
+                        signal_values[sig_name] = 0
+
+            # Current: byte 0, scale 0.2, offset 0
+            if "Current" in signal_values:
+                current = signal_values["Current"]
+                b[0] = max(0, min(255, int(current / 0.2)))
+
+            # Temp_CPU: byte 1, scale 1, offset -40 (decode subtracts 40, so encode adds 40)
+            if "Temp_CPU" in signal_values:
+                temp_cpu = signal_values["Temp_CPU"]
+                b[1] = max(0, min(255, int(temp_cpu + 40)))
+
+            # Temp_Mos: byte 2, scale 1, offset -40 (decode subtracts 40, so encode adds 40)
+            if "Temp_Mos" in signal_values:
+                temp_mos = signal_values["Temp_Mos"]
+                b[2] = max(0, min(255, int(temp_mos + 40)))
+
+            # Voltage: byte 3, scale 0.1, offset 0
+            if "Voltage" in signal_values:
+                voltage = signal_values["Voltage"]
+                b[3] = max(0, min(255, int(voltage / 0.1)))
+
+            # Power: bytes 4-5, 16-bit little-endian, scale 0.1, offset 0
+            if "Power" in signal_values:
+                power = signal_values["Power"]
+                power_raw = max(0, min(65535, int(power / 0.1)))
+                b[4] = power_raw & 0xFF
+                b[5] = (power_raw >> 8) & 0xFF
+
+            # Status: byte 6, scale 1, offset 0
+            if "Status" in signal_values:
+                status = signal_values["Status"]
+                b[6] = max(0, min(255, int(status)))
+
+            # Convert to hex string
+            hex_string = ' '.join(f"{x:02X}" for x in b)
+
+            # Update the hex input field
+            input_attr = f"input_{frame_id:x}"
+            if hasattr(self, input_attr):
+                input_field = getattr(self, input_attr)
+                input_field.setText(hex_string)
+                print(f"Updated ZCU hex payload: {hex_string}")
+            else:
+                print(f"Warning: No input field found for frame {frame_id} (attribute: {input_attr})")
+
+        except Exception as e:
+            print(f"Error updating ZCU hex from table: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def update_hvc_hex_from_table(self, frame_id):
+        """Update hex payload for HVC stat when table values change"""
+        if frame_id != ID_HV_CHARGER_STATUS:
+            return
+
+        try:
+            b = [0] * 8
+
+            # Collect all signal values (use modified if available, otherwise use live)
+            signal_values = {}
+            for sig_name, sig_data in self.signals.get(frame_id, {}).items():
+                modified = self.modified_signals.get(frame_id, {}).get(sig_name)
+                if modified and "v" in modified:
+                    signal_values[sig_name] = modified["v"]
+                elif "v" in sig_data:
+                    signal_values[sig_name] = sig_data["v"]
+                else:
+                    # Parse display value
+                    display_val = modified.get("d", "") if modified else sig_data.get("d", "")
+                    try:
+                        if sig_name == "HV_Charger_Status":
+                            signal_values[sig_name] = display_val.lower().startswith("state_a")
+                        else:
+                            clean_val = display_val.replace("°C", "").replace("V", "").replace("A", "").strip()
+                            signal_values[sig_name] = float(clean_val) if "." in clean_val else int(clean_val) if clean_val else 0
+                    except (ValueError, AttributeError):
+                        signal_values[sig_name] = 0
+
+            # Voltage: bytes 0-1, big-endian 16-bit, scale 0.1
+            if "HV_Charger_Voltage" in signal_values:
+                voltage = signal_values["HV_Charger_Voltage"]
+                voltage_raw = max(0, min(65535, int(voltage * 10.0)))
+                b[0] = (voltage_raw >> 8) & 0xFF
+                b[1] = voltage_raw & 0xFF
+
+            # Current: bytes 2-3, big-endian 16-bit, scale 0.1
+            if "HV_Charger_Current" in signal_values:
+                current = signal_values["HV_Charger_Current"]
+                current_raw = max(0, min(65535, int(current * 10.0)))
+                b[2] = (current_raw >> 8) & 0xFF
+                b[3] = current_raw & 0xFF
+
+            # Status: byte 4, bit 0
+            if "HV_Charger_Status" in signal_values:
+                status_bit = signal_values["HV_Charger_Status"]
+                if status_bit:
+                    b[4] |= 0x01
+                else:
+                    b[4] &= ~0x01
+
+            # Temperature: byte 5, offset -40
+            if "HV_Charger_Temp" in signal_values:
+                temp = signal_values["HV_Charger_Temp"]
+                b[5] = max(0, min(255, int(temp + 40)))
+
+            # Convert to hex string
+            hex_string = ' '.join(f"{x:02X}" for x in b)
+
+            # Update the hex input field
+            input_attr = f"input_{frame_id:x}"
+            if hasattr(self, input_attr):
+                input_field = getattr(self, input_attr)
+                input_field.setText(hex_string)
+                print(f"Updated HVC hex payload: {hex_string}")
+            else:
+                print(f"Warning: No input field found for frame {frame_id} (attribute: {input_attr})")
+
+        except Exception as e:
+            print(f"Error updating HVC hex from table: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def update_dc12_hex_from_table(self, frame_id):
+        """Update hex payload for DC12 stat when table values change"""
+        if frame_id != ID_DC12_STAT:
+            return
+
+        try:
+            b = [0] * 8
+
+            # Collect all signal values (use modified if available, otherwise use live)
+            signal_values = {}
+            for sig_name, sig_data in self.signals.get(frame_id, {}).items():
+                modified = self.modified_signals.get(frame_id, {}).get(sig_name)
+                if modified and "v" in modified:
+                    signal_values[sig_name] = modified["v"]
+                elif "v" in sig_data:
+                    signal_values[sig_name] = sig_data["v"]
+                else:
+                    # Parse display value
+                    display_val = modified.get("d", "") if modified else sig_data.get("d", "")
+                    try:
+                        if sig_name == "Charger_Status":
+                            signal_values[sig_name] = display_val.lower().startswith("state_a")
+                        else:
+                            clean_val = display_val.replace("°C", "").replace("V", "").replace("A", "").strip()
+                            signal_values[sig_name] = float(clean_val) if "." in clean_val else int(clean_val) if clean_val else 0
+                    except (ValueError, AttributeError):
+                        signal_values[sig_name] = 0
+
+            # Status: byte 1
+            if "Charger_Status" in signal_values:
+                status_bit = signal_values["Charger_Status"]
+                b[1] = 1 if status_bit else 0
+
+            # Charging Current: byte 3, scale 0.1
+            if "Charging_Current" in signal_values:
+                current = signal_values["Charging_Current"]
+                b[3] = max(0, min(255, int(current / 0.1)))
+
+            # DC Bus Voltage: byte 5, scale 0.1
+            if "DC_Bus_Voltage" in signal_values:
+                voltage = signal_values["DC_Bus_Voltage"]
+                b[5] = max(0, min(255, int(voltage / 0.1)))
+
+            # Temperature: byte 7, offset -40
+            if "Charger_Temperature" in signal_values:
+                temp = signal_values["Charger_Temperature"]
+                b[7] = max(0, min(255, int(temp + 40)))
+
+            # Convert to hex string
+            hex_string = ' '.join(f"{x:02X}" for x in b)
+
+            # Update the hex input field
+            input_attr = f"input_{frame_id:x}"
+            if hasattr(self, input_attr):
+                input_field = getattr(self, input_attr)
+                input_field.setText(hex_string)
+                print(f"Updated DC12 hex payload: {hex_string}")
+            else:
+                print(f"Warning: No input field found for frame {frame_id} (attribute: {input_attr})")
+
+        except Exception as e:
+            print(f"Error updating DC12 hex from table: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def update_tcu_hex_from_table(self, frame_id):
+        """Update hex payload for TCU frames when table values change"""
+        tcu_frames = [ID_TCU_ENABLE_FRAME, ID_TCU_PRND_FRAME, ID_TCU_THROTTLE_FRAME, ID_TCU_TRIM_FRAME, ID_GPS_SPEED_FRAME]
+        if frame_id not in tcu_frames:
+            return
+
+        try:
+            b = [0] * 8
+
+            # Collect all signal values (use modified if available, otherwise use live)
+            signal_values = {}
+            for sig_name, sig_data in self.signals.get(frame_id, {}).items():
+                modified = self.modified_signals.get(frame_id, {}).get(sig_name)
+                if modified and "v" in modified:
+                    signal_values[sig_name] = modified["v"]
+                elif "v" in sig_data:
+                    signal_values[sig_name] = sig_data["v"]
+                else:
+                    # Parse display value
+                    display_val = modified.get("d", "") if modified else sig_data.get("d", "")
+                    try:
+                        if sig_name in ["TCU_ENABLE", "TCU_Trim_Plus", "TCU_Trim_Minus"]:
+                            signal_values[sig_name] = display_val.lower() in ["yes", "true", "1", "on"]
+                        elif sig_name == "TCU_PRND":
+                            prnd_val = 0
+                            if "P" in display_val.upper(): prnd_val |= 0x01
+                            if "R" in display_val.upper(): prnd_val |= 0x02
+                            if "N" in display_val.upper(): prnd_val |= 0x04
+                            if "D" in display_val.upper(): prnd_val |= 0x08
+                            if "AUTO" in display_val.upper(): prnd_val |= 0x10
+                            signal_values[sig_name] = prnd_val
+                        elif sig_name == "GPS_Speed":
+                            clean_val = display_val.replace("km/h", "").replace("mph", "").strip()
+                            signal_values[sig_name] = int(float(clean_val)) if clean_val else 0
+                        else:
+                            clean_val = display_val.replace("%", "").strip()
+                            signal_values[sig_name] = float(clean_val) if "." in clean_val else int(clean_val) if clean_val else 0
+                    except (ValueError, AttributeError):
+                        signal_values[sig_name] = 0
+
+            if frame_id == ID_TCU_ENABLE_FRAME:
+                # TCU Enable: byte 4, bit 2
+                if "TCU_ENABLE" in signal_values:
+                    enable_bit = signal_values["TCU_ENABLE"]
+                    if enable_bit:
+                        b[4] |= 0x04
+                    else:
+                        b[4] &= ~0x04
+                # Use default payload for other bytes
+                default = bytes.fromhex("00 00 00 00 04 00 00 00".replace(" ", ""))
+                for i in range(8):
+                    if i != 4:
+                        b[i] = default[i]
+
+            elif frame_id == ID_TCU_PRND_FRAME:
+                # TCU PRND: byte 0
+                if "TCU_PRND" in signal_values:
+                    b[0] = signal_values["TCU_PRND"] & 0xFF
+                # Use default payload for other bytes
+                default = bytes.fromhex("01 00 00 00 00 00 00 00".replace(" ", ""))
+                for i in range(1, 8):
+                    b[i] = default[i]
+
+            elif frame_id == ID_TCU_THROTTLE_FRAME:
+                # TCU Throttle: byte 1, 0-255 for 0-100%
+                if "TCU_Throttle" in signal_values:
+                    throttle_percent = signal_values["TCU_Throttle"]
+                    throttle_raw = max(0, min(255, int((throttle_percent / 100.0) * 255.0)))
+                    b[1] = throttle_raw
+                # Use default payload for other bytes
+                default = bytes.fromhex("00 10 00 00 00 00 00 00".replace(" ", ""))
+                for i in range(8):
+                    if i != 1:
+                        b[i] = default[i]
+
+            elif frame_id == ID_TCU_TRIM_FRAME:
+                # TCU Trim: byte 0, bits 0-3
+                trim_bits = 0
+                if "TCU_Trim_Plus" in signal_values or "TCU_Trim_Minus" in signal_values:
+                    if signal_values.get("TCU_Trim_Plus"):
+                        trim_bits |= 0x01
+                    if signal_values.get("TCU_Trim_Minus"):
+                        trim_bits |= 0x02
+                b[0] = trim_bits & 0x0F
+                # Use default payload for other bytes
+                default = bytes.fromhex("00 00 00 00 00 00 00 00".replace(" ", ""))
+                for i in range(1, 8):
+                    b[i] = default[i]
+
+            elif frame_id == ID_GPS_SPEED_FRAME:
+                # GPS Speed: bytes 4-5, 16-bit little-endian
+                if "GPS_Speed" in signal_values:
+                    gps_speed = signal_values["GPS_Speed"]
+                    gps_speed_raw = max(0, min(65535, int(gps_speed)))
+                    b[4] = gps_speed_raw & 0xFF
+                    b[5] = (gps_speed_raw >> 8) & 0xFF
+                # Use default payload for other bytes
+                default = bytes.fromhex("00 00 00 00 00 11 00 00".replace(" ", ""))
+                for i in range(8):
+                    if i not in [4, 5]:
+                        b[i] = default[i]
+
+            # Convert to hex string
+            hex_string = ' '.join(f"{x:02X}" for x in b)
+
+            # Update the hex input field in TCU emulator
+            if hasattr(self, 'tcu_inputs') and frame_id in self.tcu_inputs:
+                input_field = self.tcu_inputs[frame_id]
+                input_field.setText(hex_string)
+                print(f"Updated TCU {frame_id:08X} hex payload: {hex_string}")
+            else:
+                print(f"Warning: No input field found for TCU frame {frame_id:08X}")
+
+        except Exception as e:
+            print(f"Error updating TCU hex from table: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def update_drive_hex_from_table(self, frame_id):
+        """Update hex payload for Drive frame when table values change"""
+        if frame_id != ID_DRIVE_FRAME:
+            return
+
+        try:
+            b = [0] * 8
+
+            # Collect all signal values (use modified if available, otherwise use live)
+            signal_values = {}
+            for sig_name, sig_data in self.signals.get(frame_id, {}).items():
+                modified = self.modified_signals.get(frame_id, {}).get(sig_name)
+                if modified and "v" in modified:
+                    signal_values[sig_name] = modified["v"]
+                elif "v" in sig_data:
+                    signal_values[sig_name] = sig_data["v"]
+                else:
+                    # Parse display value
+                    display_val = modified.get("d", "") if modified else sig_data.get("d", "")
+                    try:
+                        if sig_name in ["LIMP_MODE", "LIMITED_RANGE", "TCU_VALIDATED", "TCU_REVERSE", "TCU_NEUTRAL", 
+                                       "TCU_DRIVE", "TCU_ECO_SPORT", "TCU_DOCK", "TCU_ERROR_KILL",
+                                       "PCU_VALIDATED", "PCU_REVERSE", "PCU_NEUTRAL", "PCU_DRIVE", "PCU_ECO_SPORT",
+                                       "PCU_DOCK", "PCU_ENABLED", "PCU_ERROR_KILL"]:
+                            signal_values[sig_name] = display_val.lower() in ["yes", "true", "1", "on"]
+                        else:
+                            clean_val = display_val.replace("%", "").strip()
+                            signal_values[sig_name] = float(clean_val) if "." in clean_val else int(clean_val) if clean_val else 0
+                    except (ValueError, AttributeError):
+                        signal_values[sig_name] = 0
+
+            # Throttle: byte 0
+            if "Throttle" in signal_values:
+                throttle = signal_values["Throttle"]
+                b[0] = max(0, min(255, int(throttle)))
+
+            # Status: byte 1, bit field
+            status = 0
+            if signal_values.get("LIMP_MODE"):
+                status |= 0x01
+            if signal_values.get("LIMITED_RANGE"):
+                status |= 0x02
+            b[1] = status
+
+            # TCU RND: byte 2, bit field
+            tcu_rnd = 0
+            if signal_values.get("TCU_VALIDATED"):
+                tcu_rnd |= 0x01
+            if signal_values.get("TCU_REVERSE"):
+                tcu_rnd |= 0x02
+            if signal_values.get("TCU_NEUTRAL"):
+                tcu_rnd |= 0x04
+            if signal_values.get("TCU_DRIVE"):
+                tcu_rnd |= 0x08
+            if signal_values.get("TCU_ECO_SPORT"):
+                tcu_rnd |= 0x10
+            if signal_values.get("TCU_DOCK"):
+                tcu_rnd |= 0x20
+            # TCU_ENABLED removed - duplicate of TCU_ENABLE
+            if signal_values.get("TCU_ERROR_KILL"):
+                tcu_rnd |= 0x80
+            b[2] = tcu_rnd
+
+            # PCU RND: byte 3, bit field
+            pcu_rnd = 0
+            if signal_values.get("PCU_VALIDATED"):
+                pcu_rnd |= 0x01
+            if signal_values.get("PCU_REVERSE"):
+                pcu_rnd |= 0x02
+            if signal_values.get("PCU_NEUTRAL"):
+                pcu_rnd |= 0x04
+            if signal_values.get("PCU_DRIVE"):
+                pcu_rnd |= 0x08
+            if signal_values.get("PCU_ECO_SPORT"):
+                pcu_rnd |= 0x10
+            if signal_values.get("PCU_DOCK"):
+                pcu_rnd |= 0x20
+            if signal_values.get("PCU_ENABLED"):
+                pcu_rnd |= 0x40
+            if signal_values.get("PCU_ERROR_KILL"):
+                pcu_rnd |= 0x80
+            b[3] = pcu_rnd
+
+            # Trim: byte 4
+            if "Trim" in signal_values:
+                trim = signal_values["Trim"]
+                b[4] = max(0, min(255, int(trim)))
+
+            # Range: byte 5
+            if "Range" in signal_values:
+                range_val = signal_values["Range"]
+                b[5] = max(0, min(255, int(range_val)))
+
+            # Power: byte 6
+            if "Power" in signal_values:
+                power = signal_values["Power"]
+                b[6] = max(0, min(255, int(power)))
+
+            # SOC: byte 7
+            if "SOC" in signal_values:
+                soc = signal_values["SOC"]
+                b[7] = max(0, min(255, int(soc)))
+
+            # Convert to hex string
+            hex_string = ' '.join(f"{x:02X}" for x in b)
+
+            # Update the hex display label
+            if frame_id in self.hex_labels:
+                hex_label = self.hex_labels[frame_id]
+                hex_label.setText(f"0x{frame_id:08X}: {hex_string}")
+                print(f"Updated Drive frame hex payload: {hex_string}")
+            else:
+                print(f"Warning: No hex label found for Drive frame {frame_id:08X}")
+
+        except Exception as e:
+            print(f"Error updating Drive hex from table: {e}")
             import traceback
             traceback.print_exc()
 
@@ -2161,7 +2821,7 @@ class CANMonitor(QMainWindow):
             traceback.print_exc()
 
     def clear_modified_values(self):
-        """Clear all user-modified table values for PDU stat, PCU, and CCU stat"""
+        """Clear all user-modified table values for PDU stat, PCU, CCU stat, ZCU stat, HVC stat, and DC12 stat"""
         if 0x580 in self.modified_signals:
             self.modified_signals[0x580] = {}
             print("Cleared all modified PDU stat values")
@@ -2176,6 +2836,28 @@ class CANMonitor(QMainWindow):
         if 0x600 in self.modified_signals:
             self.modified_signals[0x600] = {}
             print("Cleared all modified CCU stat values")
+        
+        # Clear ZCU stat modified values
+        if 0x72E in self.modified_signals:
+            self.modified_signals[0x72E] = {}
+            print("Cleared all modified ZCU stat values")
+        
+        # Clear HVC stat modified values
+        if ID_HV_CHARGER_STATUS in self.modified_signals:
+            self.modified_signals[ID_HV_CHARGER_STATUS] = {}
+            print("Cleared all modified HVC stat values")
+        
+        # Clear DC12 stat modified values
+        if ID_DC12_STAT in self.modified_signals:
+            self.modified_signals[ID_DC12_STAT] = {}
+            print("Cleared all modified DC12 stat values")
+        
+        # Clear TCU modified values
+        tcu_frames = [ID_TCU_ENABLE_FRAME, ID_TCU_PRND_FRAME, ID_TCU_THROTTLE_FRAME, ID_TCU_TRIM_FRAME, ID_GPS_SPEED_FRAME]
+        for fid in tcu_frames:
+            if fid in self.modified_signals:
+                self.modified_signals[fid] = {}
+        print("Cleared all modified TCU values")
         
         # Force GUI update
         self.update_gui()
