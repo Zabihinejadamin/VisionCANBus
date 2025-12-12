@@ -158,6 +158,7 @@ class CANMonitor(QMainWindow):
         self.first_fill = {k: True for k in self.signals}
         self.first_fill.update({f"BT{i}": True for i in [1,2,3]})
         self.first_fill["HMI"] = True
+        self.first_fill["TCU"] = True
 
         # Store user-modified table values separately from live CAN data
         self.modified_signals = {id_: {} for id_ in set(all_ids)}
@@ -319,42 +320,42 @@ class CANMonitor(QMainWindow):
         if frame_id in (0x402, 0x422, 0x442):  # Alarms 1-8
             alarms = ["Alarm_1","Alarm_2","Alarm_3","Alarm_4","Alarm_5","Alarm_6","Alarm_7","Alarm_8"]
             for i, name in enumerate(alarms):
-                signals[name] = {"d": f"0x{b[i]:02X}", "u": ""}
+                signals[name] = {"d": f"{b[i]}", "v": b[i], "u": ""}
 
         elif frame_id in (0x404, 0x424, 0x444):
             # Byte 0
-            signals["Isol_Board_Powered"] = {"d": "Yes" if b[0] & 0x01 else "No", "u": ""}
+            signals["Isol_Board_Powered"] = {"d": "Yes" if b[0] & 0x01 else "No", "v": bool(b[0] & 0x01), "u": ""}
             # Byte 1
-            signals["Open_Sw_Error"] = {"d": "Yes" if b[1] & 0x01 else "No", "u": ""}
-            signals["No_Closing_Sw_Error"] = {"d": "Yes" if (b[1] & 0x02) else "No", "u": ""}
+            signals["Open_Sw_Error"] = {"d": "Yes" if b[1] & 0x01 else "No", "v": bool(b[1] & 0x01), "u": ""}
+            signals["No_Closing_Sw_Error"] = {"d": "Yes" if (b[1] & 0x02) else "No", "v": bool(b[1] & 0x02), "u": ""}
             # Byte 2-3: V_Cell_Avg
             v_avg = (b[2] << 8) | b[3]
-            signals["V_Cell_Avg"] = {"d": f"{v_avg}", "u": "mV"}
+            signals["V_Cell_Avg"] = {"d": f"{v_avg}", "v": v_avg, "u": "mV"}
             # Byte 4: Contactor states
             aux = b[4] & 0x0F
             main = (b[4] >> 4) & 0x0F
-            signals["Contactor_4_Aux"] = {"d": "Closed" if aux & 0x01 else "Open", "u": ""}
-            signals["Contactor_3_Aux"] = {"d": "Closed" if aux & 0x02 else "Open", "u": ""}
-            signals["Contactor_2_Aux"] = {"d": "Closed" if aux & 0x04 else "Open", "u": ""}
-            signals["Contactor_1_Aux"] = {"d": "Closed" if aux & 0x08 else "Open", "u": ""}
-            signals["Contactor_4_State"] = {"d": "Closed" if main & 0x01 else "Open", "u": ""}
-            signals["Contactor_3_State_Precharge"] = {"d": "Closed" if main & 0x02 else "Open", "u": ""}
-            signals["Contactor_2_State_Neg"] = {"d": "Closed" if main & 0x04 else "Open", "u": ""}
-            signals["Contactor_1_State_Pos"] = {"d": "Closed" if main & 0x08 else "Open", "u": ""}
+            signals["Contactor_4_Aux"] = {"d": "Closed" if aux & 0x01 else "Open", "v": bool(aux & 0x01), "u": ""}
+            signals["Contactor_3_Aux"] = {"d": "Closed" if aux & 0x02 else "Open", "v": bool(aux & 0x02), "u": ""}
+            signals["Contactor_2_Aux"] = {"d": "Closed" if aux & 0x04 else "Open", "v": bool(aux & 0x04), "u": ""}
+            signals["Contactor_1_Aux"] = {"d": "Closed" if aux & 0x08 else "Open", "v": bool(aux & 0x08), "u": ""}
+            signals["Contactor_4_State"] = {"d": "Closed" if main & 0x01 else "Open", "v": bool(main & 0x01), "u": ""}
+            signals["Contactor_3_State_Precharge"] = {"d": "Closed" if main & 0x02 else "Open", "v": bool(main & 0x02), "u": ""}
+            signals["Contactor_2_State_Neg"] = {"d": "Closed" if main & 0x04 else "Open", "v": bool(main & 0x04), "u": ""}
+            signals["Contactor_1_State_Pos"] = {"d": "Closed" if main & 0x08 else "Open", "v": bool(main & 0x08), "u": ""}
             # Byte 5
-            signals["Is_Balancing_Active"] = {"d": "Yes" if b[5] & 0x01 else "No", "u": ""}
+            signals["Is_Balancing_Active"] = {"d": "Yes" if b[5] & 0x01 else "No", "v": bool(b[5] & 0x01), "u": ""}
 
         elif frame_id in (0x405, 0x425, 0x445):
             nb_cycles = (b[3] << 24) | (b[2] << 16) | (b[1] << 8) | b[0]
             ah_discharged = (b[7] << 24) | (b[6] << 16) | (b[5] << 8) | b[4]
-            signals["Nb_Cycles"] = {"d": str(nb_cycles), "u": ""}
-            signals["Ah_Discharged"] = {"d": f"{ah_discharged / 10.0:.1f}", "u": "Ah"}
-            signals["Remaining_Time_Before_Opening"] = {"d": str(b[7]), "u": "s"}
+            signals["Nb_Cycles"] = {"d": str(nb_cycles), "v": nb_cycles, "u": ""}
+            signals["Ah_Discharged"] = {"d": f"{ah_discharged / 10.0:.1f}", "v": ah_discharged / 10.0, "u": "Ah"}
+            signals["Remaining_Time_Before_Opening"] = {"d": str(b[7]), "v": b[7], "u": "s"}
 
         elif frame_id in (0x406, 0x426, 0x446):  # Alarms 9-16
             alarms = ["Alarm_9","Alarm_10","Alarm_11","Alarm_12","Alarm_13","Alarm_14","Alarm_15","Alarm_16"]
             for i, name in enumerate(alarms):
-                signals[name] = {"d": f"0x{b[i]:02X}", "u": ""}
+                signals[name] = {"d": f"{b[i]}", "v": b[i], "u": ""}
 
         return signals
 
@@ -916,10 +917,9 @@ class CANMonitor(QMainWindow):
         l = QVBoxLayout(w)
         l.addWidget(QLabel("HMI Frames (Temperature, Voltage, Current, Drive, Motor, TCU & GPS)"))
 
-        # Add hex displays for HMI frames
+        # Add hex displays for HMI frames (excluding TCU frames which are shown separately)
         hex_layout = QHBoxLayout()
-        for fid in [ID_TEMP_FRAME, ID_VOLT_FRAME, ID_CURRENT_FRAME, ID_DRIVE_FRAME, ID_SPDTQ_FRAME,
-                    ID_TCU_ENABLE_FRAME, ID_TCU_PRND_FRAME, ID_TCU_THROTTLE_FRAME, ID_TCU_TRIM_FRAME, ID_GPS_SPEED_FRAME]:
+        for fid in [ID_TEMP_FRAME, ID_VOLT_FRAME, ID_CURRENT_FRAME, ID_DRIVE_FRAME, ID_SPDTQ_FRAME]:
             hex_label = QLabel(f"0x{fid:08X}: {self.current_hex.get(fid, '00 00 00 00 00 00 00 00')}")
             hex_label.setStyleSheet("font-family: Consolas; font-size: 10px; color: #666; padding: 1px; margin-right: 10px;")
             self.hex_labels[fid] = hex_label
@@ -985,6 +985,18 @@ class CANMonitor(QMainWindow):
 
         # Connect the master button
         self.tcu_master_btn.clicked.connect(self.toggle_all_tcu_emulation)
+
+        # Add TCU table section (like PCU stat)
+        tcu_layout = QHBoxLayout()
+        tcu_layout.addWidget(QLabel("TCU Parameters – Editable Table"))
+
+        tcu_table = QTableWidget()
+        tcu_table.setColumnCount(4)
+        tcu_table.setHorizontalHeaderLabels(["Signal","Value","Unit","TS"])
+        tcu_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        self.tcu_tab = tcu_table
+        tcu_layout.addWidget(tcu_table)
+        l.addLayout(tcu_layout)
 
         table = QTableWidget()
         table.setColumnCount(4)
@@ -1064,6 +1076,10 @@ class CANMonitor(QMainWindow):
         table.setColumnCount(4)
         table.setHorizontalHeaderLabels(["Signal","Value","Unit","TS"])
         table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        if idx == 1:  # Battery 1 table needs edit triggers for editable functionality
+            table.setEditTriggers(QTableWidget.DoubleClicked | QTableWidget.EditKeyPressed | QTableWidget.AnyKeyPressed | QTableWidget.SelectedClicked)
+            table.setSelectionBehavior(QTableWidget.SelectItems)
+            table.setSelectionMode(QTableWidget.SingleSelection)
         self.battery_tabs[idx] = table
         splitter.addWidget(table)
 
@@ -1482,18 +1498,123 @@ class CANMonitor(QMainWindow):
         # Battery tabs (merged view)
         for idx, frames in [(1,BAT1_FRAMES),(2,BAT2_FRAMES),(3,BAT3_FRAMES)]:
             table = self.battery_tabs[idx]
-            all_sig = sorted([item for fid in frames for item in self.signals.get(fid, {}).items()])
+            all_sig = []
+            for fid in frames:
+                signals_for_frame = self.signals.get(fid, {})
+
+                # For Battery 1 frames that haven't been received yet, add default signals
+                if idx == 1 and not signals_for_frame:
+                    if fid == 0x400:
+                        signals_for_frame = {
+                            "Pack_Voltage": {"d": "0", "v": 0, "u": "V"},
+                            "Pack_Current": {"d": "0", "v": 0, "u": "A"},
+                            "Pack_SOC": {"d": "0", "v": 0, "u": "%"},
+                        }
+                    elif fid == 0x401:
+                        signals_for_frame = {
+                            "Max_Cell_Voltage": {"d": "0", "v": 0, "u": "mV"},
+                            "Min_Cell_Voltage": {"d": "0", "v": 0, "u": "mV"},
+                            "Avg_Cell_Voltage": {"d": "0", "v": 0, "u": "mV"},
+                        }
+                    elif fid == 0x402:
+                        signals_for_frame = {
+                            "Alarm_1": {"d": "0", "v": 0, "u": ""},
+                            "Alarm_2": {"d": "0", "v": 0, "u": ""},
+                            "Alarm_3": {"d": "0", "v": 0, "u": ""},
+                            "Alarm_4": {"d": "0", "v": 0, "u": ""},
+                            "Alarm_5": {"d": "0", "v": 0, "u": ""},
+                            "Alarm_6": {"d": "0", "v": 0, "u": ""},
+                            "Alarm_7": {"d": "0", "v": 0, "u": ""},
+                            "Alarm_8": {"d": "0", "v": 0, "u": ""},
+                        }
+                    elif fid == 0x403:
+                        signals_for_frame = {
+                            "Isol_Board_Powered": {"d": "No", "v": False, "u": ""},
+                            "Open_Sw_Error": {"d": "No", "v": False, "u": ""},
+                            "No_Closing_Sw_Error": {"d": "No", "v": False, "u": ""},
+                            "V_Cell_Avg": {"d": "0", "v": 0, "u": "mV"},
+                        }
+                    elif fid == 0x404:
+                        signals_for_frame = {
+                            "Contactor_4_Aux": {"d": "Open", "v": False, "u": ""},
+                            "Contactor_3_Aux": {"d": "Open", "v": False, "u": ""},
+                            "Contactor_2_Aux": {"d": "Open", "v": False, "u": ""},
+                            "Contactor_1_Aux": {"d": "Open", "v": False, "u": ""},
+                            "Contactor_4_State": {"d": "Open", "v": False, "u": ""},
+                            "Contactor_3_State_Precharge": {"d": "Open", "v": False, "u": ""},
+                            "Contactor_2_State_Neg": {"d": "Open", "v": False, "u": ""},
+                            "Contactor_1_State_Pos": {"d": "Open", "v": False, "u": ""},
+                            "Is_Balancing_Active": {"d": "No", "v": False, "u": ""},
+                        }
+                    elif fid == 0x405:
+                        signals_for_frame = {
+                            "Nb_Cycles": {"d": "0", "v": 0, "u": ""},
+                            "Ah_Discharged": {"d": "0.0", "v": 0.0, "u": "Ah"},
+                            "Remaining_Time_Before_Opening": {"d": "0", "v": 0, "u": "s"},
+                        }
+                    elif fid == 0x406:
+                        signals_for_frame = {
+                            "Alarm_9": {"d": "0", "v": 0, "u": ""},
+                            "Alarm_10": {"d": "0", "v": 0, "u": ""},
+                            "Alarm_11": {"d": "0", "v": 0, "u": ""},
+                            "Alarm_12": {"d": "0", "v": 0, "u": ""},
+                            "Alarm_13": {"d": "0", "v": 0, "u": ""},
+                            "Alarm_14": {"d": "0", "v": 0, "u": ""},
+                            "Alarm_15": {"d": "0", "v": 0, "u": ""},
+                            "Alarm_16": {"d": "0", "v": 0, "u": ""},
+                        }
+
+                for name, d in signals_for_frame.items():
+                    # Use modified value if available, otherwise use live CAN data
+                    modified_data = self.modified_signals.get(fid, {}).get(name)
+                    if modified_data:
+                        display_data = modified_data.copy()
+                    else:
+                        display_data = d.copy()
+                    all_sig.append((name, display_data, fid))  # Include frame ID
+
+            all_sig.sort(key=lambda x: x[0])  # Sort by signal name
             table.setRowCount(len(all_sig))
-            for r, (name, d) in enumerate(all_sig):
+            for r, (name, d, fid) in enumerate(all_sig):
+                # Check if this value is modified
+                is_modified = self.modified_signals.get(fid, {}).get(name) is not None
+
                 for c, val in enumerate([name, d.get("d",""), d.get("u",""), f"{d.get('t',0):.3f}"]):
                     item = table.item(r, c)
                     if not item:
-                        table.setItem(r, c, QTableWidgetItem(val))
+                        item = QTableWidgetItem(val)
+                        table.setItem(r, c, item)
+                        # Make the value column (column 1) editable for Battery 1 (like PCU stat)
+                        if idx == 1 and c == 1:
+                            item.setFlags(item.flags() | Qt.ItemIsEditable)
+                            # Store frame ID and signal name for later use
+                            item.setData(Qt.UserRole, (fid, name))
+                        # Highlight modified values
+                        if is_modified and c == 1 and idx == 1:
+                            item.setBackground(Qt.yellow)
                     else:
-                        item.setText(val)
+                        # Only update if not currently being edited by user
+                        if not table.isPersistentEditorOpen(item):
+                            item.setText(val)
+                            # Ensure editable flags and data are set for existing items
+                            if idx == 1 and c == 1:
+                                item.setFlags(item.flags() | Qt.ItemIsEditable)
+                                # Store frame ID and signal name for existing items too
+                                item.setData(Qt.UserRole, (fid, name))
+                            # Update background color
+                            if is_modified and c == 1 and idx == 1:
+                                item.setBackground(Qt.yellow)
+                            elif c == 1 and idx == 1:
+                                item.setBackground(Qt.white)
+
             if self.first_fill.get(f"BT{idx}", False):
                 table.resizeColumnsToContents()
                 self.first_fill[f"BT{idx}"] = False
+
+            # Connect item changed signal for Battery 1 (like PCU stat)
+            if idx == 1 and not hasattr(table, '_item_changed_connected'):
+                table.itemChanged.connect(lambda item: self.on_battery_table_item_changed(item))
+                table._item_changed_connected = True
 
         # PCU tab (merged view)
         if hasattr(self, 'pcu_tab'):
@@ -1547,11 +1668,87 @@ class CANMonitor(QMainWindow):
                 table.itemChanged.connect(lambda item: self.on_pcu_table_item_changed(item))
                 table._item_changed_connected = True
 
-        # HMI tab (combined temperature, voltage, current, drive, speed/torque, TCU, and GPS frames)
-        hmi_frames = [ID_TEMP_FRAME, ID_VOLT_FRAME, ID_CURRENT_FRAME, ID_DRIVE_FRAME, ID_SPDTQ_FRAME,
-                      ID_TCU_ENABLE_FRAME, ID_TCU_PRND_FRAME, ID_TCU_THROTTLE_FRAME, ID_TCU_TRIM_FRAME, ID_GPS_SPEED_FRAME]
+        # TCU tab (dedicated TCU parameters table)
+        if hasattr(self, 'tcu_tab'):
+            table = self.tcu_tab
+            tcu_frames = [ID_TCU_ENABLE_FRAME, ID_TCU_PRND_FRAME, ID_TCU_THROTTLE_FRAME, ID_TCU_TRIM_FRAME, ID_GPS_SPEED_FRAME]
+            all_sig = []
+            for fid in tcu_frames:
+                # Add default signals for TCU frames if they don't exist
+                if fid not in self.signals:
+                    if fid == ID_TCU_ENABLE_FRAME:
+                        self.signals[fid] = {
+                            "TCU_ENABLE": {"d": "No", "u": "", "v": False, "t": 0}
+                        }
+                    elif fid == ID_TCU_PRND_FRAME:
+                        self.signals[fid] = {
+                            "TCU_PRND": {"d": "P", "u": "", "v": 1, "t": 0}
+                        }
+                    elif fid == ID_TCU_THROTTLE_FRAME:
+                        self.signals[fid] = {
+                            "TCU_Throttle": {"d": "0.0", "u": "%", "v": 0.0, "t": 0}
+                        }
+                    elif fid == ID_TCU_TRIM_FRAME:
+                        self.signals[fid] = {
+                            "TCU_Trim_Plus": {"d": "No", "u": "", "v": False, "t": 0},
+                            "TCU_Trim_Minus": {"d": "No", "u": "", "v": False, "t": 0}
+                        }
+                    elif fid == ID_GPS_SPEED_FRAME:
+                        self.signals[fid] = {
+                            "GPS_Speed": {"d": "0", "u": "km/h", "v": 0, "t": 0}
+                        }
+
+                for name, d in self.signals.get(fid, {}).items():
+                    # Use modified value if available, otherwise use live CAN data
+                    modified_data = self.modified_signals.get(fid, {}).get(name)
+                    if modified_data:
+                        display_data = modified_data.copy()
+                    else:
+                        display_data = d.copy()
+                    all_sig.append((name, display_data, fid))  # Include frame ID
+
+            all_sig.sort(key=lambda x: x[0])  # Sort by signal name
+            table.setRowCount(len(all_sig))
+            for r, (name, d, fid) in enumerate(all_sig):
+                # Check if this value is modified
+                is_modified = self.modified_signals.get(fid, {}).get(name) is not None
+
+                for c, val in enumerate([name, d.get("d",""), d.get("u",""), f"{d.get('t',0):.3f}"]):
+                    item = table.item(r, c)
+                    if not item:
+                        item = QTableWidgetItem(val)
+                        table.setItem(r, c, item)
+                        # Make the value column (column 1) editable for TCU frames
+                        if c == 1:
+                            item.setFlags(item.flags() | Qt.ItemIsEditable)
+                            # Store frame ID and signal name for later use
+                            item.setData(Qt.UserRole, (fid, name))
+                        # Highlight modified values
+                        if is_modified and c == 1:
+                            item.setBackground(Qt.yellow)
+                    else:
+                        # Only update if not currently being edited by user
+                        if not table.isPersistentEditorOpen(item):
+                            item.setText(val)
+                            # Update background color
+                            if is_modified and c == 1:
+                                item.setBackground(Qt.yellow)
+                            elif c == 1:
+                                item.setBackground(Qt.white)
+
+            if self.first_fill.get("TCU", False):
+                table.resizeColumnsToContents()
+                self.first_fill["TCU"] = False
+
+            # Connect item changed signal if not already connected
+            if not hasattr(table, '_tcu_item_changed_connected'):
+                table.itemChanged.connect(lambda item: self.on_tcu_table_item_changed(item))
+                table._tcu_item_changed_connected = True
+
+        # HMI tab (combined temperature, voltage, current, drive, and speed/torque frames - TCU frames now have their own table)
+        hmi_frames = [ID_TEMP_FRAME, ID_VOLT_FRAME, ID_CURRENT_FRAME, ID_DRIVE_FRAME, ID_SPDTQ_FRAME]
         tcu_frames = [ID_TCU_ENABLE_FRAME, ID_TCU_PRND_FRAME, ID_TCU_THROTTLE_FRAME, ID_TCU_TRIM_FRAME, ID_GPS_SPEED_FRAME]
-        editable_hmi_frames = tcu_frames + [ID_DRIVE_FRAME]  # TCU frames + Drive frame (contains TCU RND signals)
+        editable_hmi_frames = [ID_DRIVE_FRAME]  # Only Drive frame is editable in main HMI table (TCU frames have their own table)
         table = self.hmi_tab
         # Collect signals with their frame IDs
         all_sig_with_fid = []
@@ -1797,6 +1994,121 @@ class CANMonitor(QMainWindow):
             self.update_drive_hex_from_table(frame_id)
         else:
             self.update_tcu_hex_from_table(frame_id)
+
+    def on_battery_table_item_changed(self, item):
+        """Handle changes to Battery 1 table items (like PCU stat)"""
+        if item.column() != 1:  # Only handle value column changes
+            return
+
+        # Get frame ID and signal name from stored data
+        data = item.data(Qt.UserRole)
+        if not data:
+            return
+
+        frame_id, signal_name = data
+        new_value = item.text()
+
+        print(f"Battery 1 value changed: Frame {frame_id:03X}, Signal {signal_name} = {new_value}")
+
+        # Store the modified value
+        if frame_id not in self.modified_signals:
+            self.modified_signals[frame_id] = {}
+
+        # Get original signal data to preserve value type
+        original_sig = self.signals.get(frame_id, {}).get(signal_name, {})
+
+        # Try to parse the new value to the same type as original
+        try:
+            # Get original value type
+            if "v" in original_sig:
+                original_val = original_sig["v"]
+                # Try to convert new_value to same type
+                if isinstance(original_val, bool):
+                    # Handle boolean values
+                    parsed_val = new_value.lower() in ["yes", "true", "1", "on", "active"]
+                elif isinstance(original_val, float):
+                    clean_val = new_value.replace("V", "").replace("A", "").replace("°C", "").replace("%", "").replace("Ah", "").strip()
+                    parsed_val = float(clean_val) if clean_val else 0.0
+                elif isinstance(original_val, int):
+                    clean_val = new_value.replace("V", "").replace("A", "").replace("°C", "").replace("%", "").replace("Ah", "").strip()
+                    parsed_val = int(float(clean_val)) if clean_val else 0
+                else:
+                    # Keep as string for enum types
+                    parsed_val = new_value
+            else:
+                # Try to infer type from display value
+                clean_val = new_value.replace("V", "").replace("A", "").replace("°C", "").replace("%", "").replace("Ah", "").strip()
+                if clean_val.lower() in ["yes", "no", "true", "false", "active", "inactive", "on", "off"]:
+                    parsed_val = clean_val.lower() in ["yes", "true", "active", "on"]
+                elif "." in clean_val:
+                    parsed_val = float(clean_val)
+                else:
+                    parsed_val = int(clean_val) if clean_val else 0
+        except (ValueError, AttributeError):
+            # If parsing fails, try to use original value
+            parsed_val = original_sig.get("v", 0)
+
+        self.modified_signals[frame_id][signal_name] = {
+            "d": new_value,  # Display value
+            "v": parsed_val,  # Parsed value for encoding
+            "u": original_sig.get("u", ""),  # Unit
+            "t": time.time()
+        }
+
+        # Update hex payload for Battery frame
+        self.update_battery_hex_from_table(frame_id)
+
+    def update_battery_hex_from_table(self, frame_id):
+        """Update hex payload for Battery 1 frames when table values change"""
+        if frame_id not in BAT1_FRAMES:
+            return
+
+        try:
+            # Use cantools to encode the message
+            # Collect all signal values (use modified if available, otherwise use live)
+            signal_values = {}
+            for sig_name, sig_data in self.signals.get(frame_id, {}).items():
+                modified = self.modified_signals.get(frame_id, {}).get(sig_name)
+                if modified and "v" in modified:
+                    signal_values[sig_name] = modified["v"]
+                elif "v" in sig_data:
+                    signal_values[sig_name] = sig_data["v"]
+                else:
+                    # Parse display value
+                    display_val = modified.get("d", "") if modified else sig_data.get("d", "")
+                    try:
+                        if sig_name in ["Alarm_1", "Alarm_2", "Alarm_3", "Alarm_4", "Alarm_5", "Alarm_6", "Alarm_7", "Alarm_8",
+                                        "Alarm_9", "Alarm_10", "Alarm_11", "Alarm_12", "Alarm_13", "Alarm_14", "Alarm_15", "Alarm_16"]:
+                            signal_values[sig_name] = display_val.lower() in ["yes", "true", "1", "on", "active"]
+                        else:
+                            # Try numeric parsing
+                            clean_val = display_val.replace("V", "").replace("A", "").replace("°C", "").replace("%", "").replace("Ah", "").strip()
+                            if "." in clean_val:
+                                signal_values[sig_name] = float(clean_val)
+                            else:
+                                signal_values[sig_name] = int(clean_val) if clean_val else 0
+                    except (ValueError, AttributeError):
+                        signal_values[sig_name] = 0
+
+            # Encode the message using cantools
+            encoded_data = self.db.encode_message(frame_id, signal_values)
+
+            # Convert to hex string
+            hex_string = encoded_data.hex(' ').upper()
+
+            # Update the hex input field
+            input_attr = f"bat_inputs[{frame_id}]"
+            if hasattr(self, 'bat_inputs') and frame_id in self.bat_inputs:
+                input_field = self.bat_inputs[frame_id]
+                input_field.setText(hex_string)
+                print(f"Updated Battery 1 hex payload: {hex_string}")
+            else:
+                print(f"Warning: No input field found for frame {frame_id} (attribute: {input_attr})")
+
+        except Exception as e:
+            print(f"Error updating Battery 1 hex from table: {e}")
+            import traceback
+            traceback.print_exc()
 
     def update_ccu_hex_from_table(self, frame_id):
         """Update hex payload for CCU stat when table values change"""
@@ -2445,6 +2757,79 @@ class CANMonitor(QMainWindow):
 
         # Update hex payload for PCU frame
         self.update_pcu_hex_from_table(frame_id)
+
+    def on_tcu_table_item_changed(self, item):
+        """Handle changes to TCU table items"""
+        if item.column() != 1:  # Only handle value column changes
+            return
+
+        # Get frame ID and signal name from stored data
+        data = item.data(Qt.UserRole)
+        if not data:
+            return
+
+        frame_id, signal_name = data
+        new_value = item.text()
+
+        print(f"TCU value changed: Frame {frame_id:08X}, Signal {signal_name} = {new_value}")
+
+        # Store the modified value
+        if frame_id not in self.modified_signals:
+            self.modified_signals[frame_id] = {}
+
+        # Get original signal data to preserve value type
+        original_sig = self.signals.get(frame_id, {}).get(signal_name, {})
+
+        # Try to parse the new value to the same type as original
+        try:
+            # Get original value type
+            if "v" in original_sig:
+                original_val = original_sig["v"]
+                # Try to convert new_value to same type
+                if isinstance(original_val, bool):
+                    # Handle boolean values
+                    parsed_val = new_value.lower() in ["yes", "true", "1", "on"]
+                elif isinstance(original_val, float):
+                    clean_val = new_value.replace("%", "").replace("km/h", "").replace("mph", "").strip()
+                    parsed_val = float(clean_val) if clean_val else 0.0
+                elif isinstance(original_val, int):
+                    # For PRND, parse the string representation
+                    if signal_name == "TCU_PRND":
+                        prnd_val = 0
+                        if "P" in new_value.upper(): prnd_val |= 0x01
+                        if "R" in new_value.upper(): prnd_val |= 0x02
+                        if "N" in new_value.upper(): prnd_val |= 0x04
+                        if "D" in new_value.upper(): prnd_val |= 0x08
+                        if "AUTO" in new_value.upper(): prnd_val |= 0x10
+                        parsed_val = prnd_val
+                    else:
+                        clean_val = new_value.replace("%", "").replace("km/h", "").replace("mph", "").strip()
+                        parsed_val = int(float(clean_val)) if clean_val else 0
+                else:
+                    # Keep as string for enum types
+                    parsed_val = new_value
+            else:
+                # Try to infer type from display value
+                clean_val = new_value.replace("%", "").strip()
+                if clean_val.lower() in ["yes", "no", "true", "false"]:
+                    parsed_val = clean_val.lower() in ["yes", "true"]
+                elif "." in clean_val:
+                    parsed_val = float(clean_val)
+                else:
+                    parsed_val = int(clean_val) if clean_val else 0
+        except (ValueError, AttributeError):
+            # If parsing fails, try to use original value
+            parsed_val = original_sig.get("v", 0)
+
+        self.modified_signals[frame_id][signal_name] = {
+            "d": new_value,  # Display value
+            "v": parsed_val,  # Parsed value for encoding
+            "u": original_sig.get("u", ""),  # Unit
+            "t": time.time()
+        }
+
+        # Update hex payload for TCU frame
+        self.update_tcu_hex_from_table(frame_id)
 
     def update_pcu_hex_from_table(self, frame_id):
         """Update hex payload for PCU frames when table values change"""
