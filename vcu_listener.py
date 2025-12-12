@@ -2886,9 +2886,11 @@ class CANMonitor(QMainWindow):
                         # Update the hex input field
                         # Check if it's in pcu_inputs dictionary
                         if hasattr(self, 'pcu_inputs') and frame_id in self.pcu_inputs:
-                            input_field = self.pcu_inputs[frame_id]
-                            input_field.setText(hex_string)
-                            print(f"Updated PCU frame {frame_id:03X} hex payload: {hex_string}")
+                            # Don't update PCU input fields when PCU emulation is active
+                            if not EMULATOR_PCU_ENABLED:
+                                input_field = self.pcu_inputs[frame_id]
+                                input_field.setText(hex_string)
+                                print(f"Updated PCU frame {frame_id:03X} hex payload: {hex_string}")
                         else:
                             # Fallback: try attribute name (for other frames like PDU)
                             input_attr = f"input_{frame_id:x}"
@@ -3015,9 +3017,11 @@ class CANMonitor(QMainWindow):
 
             # Update the hex input field
             if hasattr(self, 'pcu_inputs') and frame_id in self.pcu_inputs:
-                input_field = self.pcu_inputs[frame_id]
-                input_field.setText(hex_string)
-                print(f"Updated PCU Motor frame {frame_id:03X} hex payload: {hex_string}")
+                # Don't update PCU input fields when PCU emulation is active
+                if not EMULATOR_PCU_ENABLED:
+                    input_field = self.pcu_inputs[frame_id]
+                    input_field.setText(hex_string)
+                    print(f"Updated PCU Motor frame {frame_id:03X} hex payload: {hex_string}")
             else:
                 print(f"Warning: No input field found for frame {frame_id:03X}")
 
@@ -3093,9 +3097,11 @@ class CANMonitor(QMainWindow):
 
             # Update the hex input field
             if hasattr(self, 'pcu_inputs') and frame_id in self.pcu_inputs:
-                input_field = self.pcu_inputs[frame_id]
-                input_field.setText(hex_string)
-                print(f"Updated PCU Cooling frame {frame_id:03X} hex payload: {hex_string}")
+                # Don't update PCU input fields when PCU emulation is active
+                if not EMULATOR_PCU_ENABLED:
+                    input_field = self.pcu_inputs[frame_id]
+                    input_field.setText(hex_string)
+                    print(f"Updated PCU Cooling frame {frame_id:03X} hex payload: {hex_string}")
             else:
                 print(f"Warning: No input field found for frame {frame_id:03X}")
 
@@ -3187,9 +3193,11 @@ class CANMonitor(QMainWindow):
             # Update the hex input field
             # Check if it's in pcu_inputs dictionary
             if hasattr(self, 'pcu_inputs') and frame_id in self.pcu_inputs:
-                input_field = self.pcu_inputs[frame_id]
-                input_field.setText(hex_string)
-                print(f"Updated PCU Power frame {frame_id:03X} hex payload: {hex_string}")
+                # Don't update PCU input fields when PCU emulation is active
+                if not EMULATOR_PCU_ENABLED:
+                    input_field = self.pcu_inputs[frame_id]
+                    input_field.setText(hex_string)
+                    print(f"Updated PCU Power frame {frame_id:03X} hex payload: {hex_string}")
             else:
                 # Fallback: try attribute name
                 input_attr = f"input_{frame_id:x}"
