@@ -3502,15 +3502,6 @@ class CANMonitor(QMainWindow):
             process = subprocess.Popen([sys.executable, gui_script],
                                      cwd=os.path.dirname(__file__))
 
-            QMessageBox.information(self, "RetainVar Monitor Launched",
-                "The original RetainVar Monitor GUI has been launched in a separate window.\n\n"
-                "You can now use all the original features:\n"
-                "• Connect to CAN bus\n"
-                "• Monitor CAN messages\n"
-                "• Select boards and read/write variables\n"
-                "• Program firmware\n"
-                "• Use the interactive command interface")
-
         except Exception as e:
             QMessageBox.critical(self, "Launch Failed",
                 f"Failed to launch the original RetainVar GUI:\n{str(e)}")
