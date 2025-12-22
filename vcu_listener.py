@@ -5,9 +5,20 @@ import sys
 import cantools
 import can
 from PyQt5.QtWidgets import *
-from PyQt5.QtCore import QTimer, Qt
+from PyQt5.QtWidgets import QHeaderView
+from PyQt5.QtCore import QTimer, Qt, pyqtSlot, QMetaObject, Q_ARG
 import threading
 import time
+
+# RetainVar integration
+try:
+    from retainvar.can_communication import (
+        RetainVarMonitor, CANResult, BaudRate,
+        CANError, MessageType, CANMessage
+    )
+    RETAINVAR_AVAILABLE = True
+except ImportError:
+    RETAINVAR_AVAILABLE = False
 
 # === CONFIG ===
 DBC_FILE = 'DBC/vcu_updated.dbc'
@@ -137,6 +148,11 @@ class CANMonitor(QMainWindow):
         self.error_count = 0
         self.first_fill = {}
         self.bat1_cycle_index = 0
+
+        # RetainVar initialization
+        self.retainvar_message_count = 0
+        self.retainvar_can_id_map = {}
+        self.retainvar_last_message_time = time.time()
 
         try:
             self.db = cantools.database.load_file(DBC_FILE)
@@ -292,6 +308,10 @@ class CANMonitor(QMainWindow):
         self.create_battery_tab_with_emulator("Battery 1", 1, BAT1_FRAMES)
         self.create_battery_tab("Battery 2", 2, BAT2_FRAMES)
         self.create_battery_tab("Battery 3", 3, BAT3_FRAMES)
+        if RETAINVAR_AVAILABLE:
+            self.create_retainvar_tab()
+        else:
+            self.create_retainvar_placeholder_tab()
 
         self.raw_log = QTextEdit()
         self.raw_log.setReadOnly(True)
@@ -3390,6 +3410,544 @@ class CANMonitor(QMainWindow):
                 for d in self.signals.values():
                     d.clear()
                 self.raw_log_lines.clear()
+
+    def create_retainvar_placeholder_tab(self):
+        """Create a placeholder tab when retainvar is not available"""
+        w = QWidget()
+        l = QVBoxLayout(w)
+        l.addWidget(QLabel("RetainVar library not found."))
+        l.addWidget(QLabel("Please ensure retainvar directory is present."))
+        self.tabs.addTab(w, "RetainVar")
+
+    def create_retainvar_tab(self):
+        """Create the RetainVar tab with full functionality"""
+        # Main tab widget
+        main_widget = QWidget()
+        main_layout = QVBoxLayout(main_widget)
+
+        # Create notebook for sub-tabs
+        self.retainvar_notebook = QTabWidget()
+
+        # Initialize retainvar monitor
+        self.retainvar_monitor = None
+        self.retainvar_current_board = None
+
+        # CAN Bus Monitor tab
+        self.create_retainvar_canbus_tab()
+
+        # Control tab
+        self.create_retainvar_control_tab()
+
+        # About tab
+        self.create_retainvar_about_tab()
+
+        main_layout.addWidget(self.retainvar_notebook)
+        self.tabs.addTab(main_widget, "RetainVar")
+
+    def create_retainvar_canbus_tab(self):
+        """Create CAN Bus Monitor tab"""
+        canbus_widget = QWidget()
+        canbus_layout = QVBoxLayout(canbus_widget)
+
+        # Interface selection
+        interface_layout = QHBoxLayout()
+        interface_layout.addWidget(QLabel("CAN Interface:"))
+        self.retainvar_interface_combo = QComboBox()
+        self.retainvar_interface_combo.addItems(["PCAN_USBBUS1", "PCAN_USBBUS2", "PCAN_USBBUS3", "PCAN_USBBUS4", "can0", "can1"])
+        self.retainvar_interface_combo.setCurrentText("PCAN_USBBUS1")
+        interface_layout.addWidget(self.retainvar_interface_combo)
+
+        check_btn = QPushButton("Check Interfaces")
+        check_btn.clicked.connect(self.retainvar_check_interfaces)
+        interface_layout.addWidget(check_btn)
+        interface_layout.addStretch()
+        canbus_layout.addLayout(interface_layout)
+
+        # Baud rate selection
+        baud_layout = QHBoxLayout()
+        baud_layout.addWidget(QLabel("Baud Rate:"))
+        self.retainvar_baud_combo = QComboBox()
+        self.retainvar_baud_combo.addItems(["250 kBit/s", "500 kBit/s", "1 MBit/s"])
+        self.retainvar_baud_combo.setCurrentText("250 kBit/s")
+        baud_layout.addWidget(self.retainvar_baud_combo)
+        baud_layout.addStretch()
+        canbus_layout.addLayout(baud_layout)
+
+        # Connect button
+        self.retainvar_connect_btn = QPushButton("Connect")
+        self.retainvar_connect_btn.clicked.connect(self.retainvar_connect)
+        canbus_layout.addWidget(self.retainvar_connect_btn)
+
+        # Status label
+        self.retainvar_status_label = QLabel("Ready to connect...")
+        self.retainvar_status_label.setStyleSheet("color:#666; font-weight:bold;")
+        canbus_layout.addWidget(self.retainvar_status_label)
+
+        # Messages table
+        messages_layout = QVBoxLayout()
+        messages_layout.addWidget(QLabel("CAN Messages:"))
+
+        self.retainvar_message_table = QTableWidget()
+        self.retainvar_message_table.setColumnCount(6)
+        self.retainvar_message_table.setHorizontalHeaderLabels(["Type", "ID", "Length", "Data", "Count", "Time"])
+        self.retainvar_message_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        self.retainvar_message_table.setAlternatingRowColors(True)
+        messages_layout.addWidget(self.retainvar_message_table)
+
+        # Clear button
+        clear_btn = QPushButton("Clear Messages")
+        clear_btn.clicked.connect(self.retainvar_clear_messages)
+        messages_layout.addWidget(clear_btn)
+
+        canbus_layout.addLayout(messages_layout)
+        self.retainvar_notebook.addTab(canbus_widget, "CAN Bus Monitor")
+
+    def create_retainvar_control_tab(self):
+        """Create Control tab for variable reading/writing"""
+        control_widget = QWidget()
+        control_layout = QVBoxLayout(control_widget)
+
+        # Board selection
+        board_layout = QHBoxLayout()
+        board_layout.addWidget(QLabel("Board Type:"))
+        self.retainvar_board_combo = QComboBox()
+        self.retainvar_board_combo.addItems(["PCU", "TCU", "BMS", "SCU", "FCU", "WLU", "OBD_DC_DC", "CCU", "GATE", "PDU", "ZCU", "VCU"])
+        self.retainvar_board_combo.setCurrentText("PCU")
+        self.retainvar_board_combo.currentTextChanged.connect(self.retainvar_select_board)
+        board_layout.addWidget(self.retainvar_board_combo)
+
+        select_btn = QPushButton("Select Board")
+        select_btn.clicked.connect(self.retainvar_select_board)
+        board_layout.addWidget(select_btn)
+        board_layout.addStretch()
+        control_layout.addLayout(board_layout)
+
+        # Variables list
+        var_layout = QVBoxLayout()
+        var_layout.addWidget(QLabel("Available Variables:"))
+        self.retainvar_var_list = QListWidget()
+        self.retainvar_var_list.setMaximumHeight(150)
+        var_layout.addWidget(self.retainvar_var_list)
+
+        # Read button
+        self.retainvar_read_btn = QPushButton("Read Variable")
+        self.retainvar_read_btn.clicked.connect(self.retainvar_read_variable)
+        var_layout.addWidget(self.retainvar_read_btn)
+
+        # Status label
+        self.retainvar_var_status = QLabel("")
+        var_layout.addWidget(self.retainvar_var_status)
+        control_layout.addLayout(var_layout)
+
+        # Write section
+        write_layout = QVBoxLayout()
+        write_layout.addWidget(QLabel("Write Variable:"))
+        self.retainvar_value_input = QLineEdit()
+        self.retainvar_value_input.setPlaceholderText("Enter value to write")
+        write_layout.addWidget(self.retainvar_value_input)
+
+        self.retainvar_write_btn = QPushButton("Write Variable")
+        self.retainvar_write_btn.clicked.connect(self.retainvar_write_variable)
+        write_layout.addWidget(self.retainvar_write_btn)
+        control_layout.addLayout(write_layout)
+
+        # Firmware programming section
+        fw_layout = QVBoxLayout()
+        fw_layout.addWidget(QLabel("Firmware Programming:"))
+        self.retainvar_hex_path = QLineEdit()
+        self.retainvar_hex_path.setPlaceholderText("Path to .hex firmware file")
+        fw_layout.addWidget(self.retainvar_hex_path)
+
+        browse_btn = QPushButton("Browse...")
+        browse_btn.clicked.connect(self.retainvar_browse_hex)
+        fw_layout.addWidget(browse_btn)
+
+        self.retainvar_program_btn = QPushButton("Program Firmware")
+        self.retainvar_program_btn.clicked.connect(self.retainvar_program_firmware)
+        self.retainvar_program_btn.setStyleSheet("background:#ff5722;color:white;font-weight:bold;")
+        fw_layout.addWidget(self.retainvar_program_btn)
+
+        self.retainvar_fw_status = QLabel("")
+        fw_layout.addWidget(self.retainvar_fw_status)
+        control_layout.addLayout(fw_layout)
+
+        self.retainvar_notebook.addTab(control_widget, "Control")
+
+    def create_retainvar_about_tab(self):
+        """Create About tab"""
+        about_widget = QWidget()
+        about_layout = QVBoxLayout(about_widget)
+
+        about_text = QLabel("""
+        <h2>RetainVar Monitor</h2>
+        <p><b>Version:</b> 1.0.0</p>
+        <p><b>Source:</b> https://github.com/Zabihinejadamin/retainvar_python</p>
+        <p><b>Description:</b> CAN bus monitoring and control tool for marine propulsion systems</p>
+        <p><b>Supported Boards:</b></p>
+        <ul>
+        <li>PCU - Power Control Unit</li>
+        <li>TCU - Transmission Control Unit</li>
+        <li>BMS - Battery Management System</li>
+        <li>SCU - Safety Control Unit</li>
+        <li>FCU - Fuel Cell Unit</li>
+        <li>WLU - Water Level Unit</li>
+        <li>OBD_DC_DC - OBD DC-DC Converter</li>
+        <li>CCU - Central Control Unit</li>
+        <li>GATE - Gateway</li>
+        <li>PDU - Power Distribution Unit</li>
+        <li>ZCU - Zone Control Unit</li>
+        <li>VCU - Vehicle Control Unit</li>
+        </ul>
+        """)
+        about_text.setWordWrap(True)
+        about_layout.addWidget(about_text)
+        about_layout.addStretch()
+
+        self.retainvar_notebook.addTab(about_widget, "About")
+
+    # RetainVar event handlers
+    def retainvar_check_interfaces(self):
+        """Check available CAN interfaces"""
+        try:
+            from retainvar.can_communication import CANCommunication
+            interfaces = CANCommunication.list_available_interfaces()
+            msg = f"Available interfaces: {', '.join(interfaces)}"
+            QMessageBox.information(self, "CAN Interfaces", msg)
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to check interfaces: {e}")
+
+    def retainvar_connect(self):
+        """Connect/disconnect from CAN bus"""
+        if not self.retainvar_monitor:
+            # Connect
+            interface = self.retainvar_interface_combo.currentText()
+            baud_text = self.retainvar_baud_combo.currentText()
+
+            # Convert baud rate text to BaudRate enum
+            baud_map = {
+                "250 kBit/s": BaudRate.BAUD_250K,
+                "500 kBit/s": BaudRate.BAUD_500K,
+                "1 MBit/s": BaudRate.BAUD_1M
+            }
+            baud_rate = baud_map.get(baud_text, BaudRate.BAUD_250K)
+
+            try:
+                self.retainvar_monitor = RetainVarMonitor(interface, baud_rate)
+                result = self.retainvar_monitor.connect()
+
+                if result == CANResult.ERR_OK:
+                    self.retainvar_status_label.setText(f"Connected - Monitoring CAN bus...")
+                    self.retainvar_status_label.setStyleSheet("color:#4caf50; font-weight:bold;")
+                    self.retainvar_connect_btn.setText("Disconnect")
+
+                    self.retainvar_start_monitoring()
+                else:
+                    self.retainvar_status_label.setText("Connection failed")
+                    self.retainvar_status_label.setStyleSheet("color:#d32f2f; font-weight:bold;")
+
+            except Exception as e:
+                self.retainvar_status_label.setText("Connection error")
+                self.retainvar_status_label.setStyleSheet("color:#d32f2f; font-weight:bold;")
+        else:
+            # Disconnect
+            self.retainvar_stop_monitoring()
+            if self.retainvar_monitor:
+                self.retainvar_monitor.disconnect()
+                self.retainvar_monitor = None
+            self.retainvar_connect_btn.setText("Connect")
+            self.retainvar_status_label.setText("Disconnected")
+            self.retainvar_status_label.setStyleSheet("color:#666; font-weight:bold;")
+
+    def retainvar_start_monitoring(self):
+        """Start CAN message monitoring"""
+        if not self.retainvar_monitor:
+            return
+
+        self.retainvar_monitoring_active = True
+        self.retainvar_monitor_thread = threading.Thread(target=self.retainvar_monitor_messages, daemon=True)
+        self.retainvar_monitor_thread.start()
+
+    def retainvar_stop_monitoring(self):
+        """Stop CAN message monitoring"""
+        self.retainvar_monitoring_active = False
+        if hasattr(self, 'retainvar_monitor_thread'):
+            self.retainvar_monitor_thread.join(timeout=1.0)
+
+    def retainvar_monitor_messages(self):
+        """Monitor CAN messages in background thread"""
+        while self.retainvar_monitoring_active and self.retainvar_monitor:
+            try:
+                result, message, timestamp = self.retainvar_monitor.can_comm.receive_message(0.1)
+
+                if result == CANResult.ERR_OK and message:
+                    QMetaObject.invokeMethod(self, "retainvar_add_message_to_list",
+                                           Qt.QueuedConnection,
+                                           Q_ARG(object, message),
+                                           Q_ARG(object, timestamp))
+                elif result == CANResult.ERR_QRCVEMPTY:
+                    # No message received, continue
+                    continue
+                else:
+                    # Error occurred
+                    QMetaObject.invokeMethod(self, "retainvar_update_status",
+                                           Qt.QueuedConnection,
+                                           Q_ARG(str, f"Receive error: {result}"))
+
+            except Exception as e:
+                QMetaObject.invokeMethod(self, "retainvar_update_status",
+                                       Qt.QueuedConnection,
+                                       Q_ARG(str, f"Monitoring error: {e}"))
+                break
+
+    @pyqtSlot(object, object)
+    def retainvar_add_message_to_list(self, message, timestamp):
+        """Add received CAN message to the table"""
+        self.retainvar_message_count += 1
+        self.retainvar_last_message_time = time.time()
+
+        can_id = message.id
+
+        if can_id not in self.retainvar_can_id_map:
+            self.retainvar_can_id_map[can_id] = {
+                'count': 0,
+                'message': message,
+                'last_update': time.time()
+            }
+
+        self.retainvar_can_id_map[can_id]['count'] += 1
+        self.retainvar_can_id_map[can_id]['message'] = message
+        self.retainvar_can_id_map[can_id]['last_update'] = time.time()
+
+        self.retainvar_update_message_display()
+        self.retainvar_update_status_display()
+
+    def retainvar_update_message_display(self):
+        """Update the CAN messages table display"""
+        if not hasattr(self, 'retainvar_message_table'):
+            return
+
+        self.retainvar_message_table.setRowCount(0)
+
+        for can_id, data in self.retainvar_can_id_map.items():
+            message = data['message']
+            count = data['count']
+            last_update = data['last_update']
+
+            # Determine message type
+            if message.msgtype == MessageType.MSGTYPE_EXTENDED:
+                msg_type = "EXT"
+            elif message.msgtype == MessageType.MSGTYPE_RTR:
+                msg_type = "RTR"
+            else:
+                msg_type = "STD"
+
+            # Format CAN ID
+            if message.msgtype == MessageType.MSGTYPE_EXTENDED:
+                msg_id = f"{message.id:08X}"
+            else:
+                msg_id = f"{message.id:03X}"
+
+            # Format data
+            data_str = ' '.join([f'{b:02X}' for b in message.data])
+
+            # Format timestamp
+            time_str = time.strftime("%H:%M:%S", time.localtime(last_update))
+
+            row = self.retainvar_message_table.rowCount()
+            self.retainvar_message_table.insertRow(row)
+            self.retainvar_message_table.setItem(row, 0, QTableWidgetItem(msg_type))
+            self.retainvar_message_table.setItem(row, 1, QTableWidgetItem(msg_id))
+            self.retainvar_message_table.setItem(row, 2, QTableWidgetItem(str(len(message.data))))
+            self.retainvar_message_table.setItem(row, 3, QTableWidgetItem(data_str))
+            self.retainvar_message_table.setItem(row, 4, QTableWidgetItem(str(count)))
+            self.retainvar_message_table.setItem(row, 5, QTableWidgetItem(time_str))
+
+    def retainvar_update_status_display(self):
+        """Update the status display"""
+        time_since_last = time.time() - self.retainvar_last_message_time
+
+        if time_since_last < 1.0:
+            status = f"Connected - Monitoring CAN bus... Messages: {self.retainvar_message_count}"
+        elif time_since_last < 5.0:
+            status = f"Connected - Monitoring CAN bus... Messages: {self.retainvar_message_count} (Last: {time_since_last:.1f}s ago)"
+        else:
+            status = f"Connected - Monitoring CAN bus... Messages: {self.retainvar_message_count} (No messages for {time_since_last:.0f}s)"
+
+        self.retainvar_status_label.setText(status)
+
+    @pyqtSlot(str)
+    def retainvar_update_status(self, message):
+        """Update status label"""
+        self.retainvar_status_label.setText(message)
+
+    def retainvar_clear_messages(self):
+        """Clear all CAN messages"""
+        self.retainvar_message_table.setRowCount(0)
+        self.retainvar_message_count = 0
+        self.retainvar_can_id_map.clear()
+        self.retainvar_last_message_time = time.time()
+        self.retainvar_update_status_display()
+
+    def retainvar_select_board(self):
+        """Select board type for variable access"""
+        if not self.retainvar_monitor:
+            return
+
+        board_type = self.retainvar_board_combo.currentText()
+        if self.retainvar_monitor.select_board(board_type):
+            self.retainvar_current_board = self.retainvar_monitor.current_board
+            self.retainvar_load_variables()
+        else:
+            self.retainvar_var_status.setText(f"Failed to select {board_type} board")
+
+    def retainvar_load_variables(self):
+        """Load available variables for current board"""
+        if not self.retainvar_monitor:
+            return
+
+        self.retainvar_var_list.clear()
+
+        try:
+            variables = self.retainvar_monitor.list_variables()
+
+            for idx, name in variables:
+                self.retainvar_var_list.addItem(f"{idx:2d}: {name}")
+
+            self.retainvar_var_status.setText(f"Loaded {len(variables)} variables")
+
+        except Exception as e:
+            self.retainvar_var_status.setText(f"Error loading variables: {e}")
+
+    def retainvar_read_variable(self):
+        """Read selected variable"""
+        if not self.retainvar_monitor:
+            self.retainvar_var_status.setText("Not connected to CAN bus")
+            return
+
+        # Check if CAN is connected
+        if not hasattr(self.retainvar_monitor, 'can_comm') or not self.retainvar_monitor.can_comm.is_connected:
+            self.retainvar_var_status.setText("CAN bus not connected")
+            return
+
+        current_item = self.retainvar_var_list.currentItem()
+        if not current_item:
+            self.retainvar_var_status.setText("Please select a variable")
+            return
+
+        try:
+            var_text = current_item.text()
+            var_index = int(var_text.split(':')[0].strip())
+
+            success, value = self.retainvar_monitor.read_variable(var_index)
+
+            if success:
+                self.retainvar_var_status.setText(f"Variable {var_index}: {value}")
+            else:
+                self.retainvar_var_status.setText(f"Failed to read variable {var_index}")
+
+        except Exception as e:
+            self.retainvar_var_status.setText(f"Read error: {e}")
+
+    def retainvar_write_variable(self):
+        """Write value to selected variable"""
+        if not self.retainvar_monitor:
+            self.retainvar_var_status.setText("Not connected to CAN bus")
+            return
+
+        # Check if CAN is connected
+        if not hasattr(self.retainvar_monitor, 'can_comm') or not self.retainvar_monitor.can_comm.is_connected:
+            self.retainvar_var_status.setText("CAN bus not connected")
+            return
+
+        current_item = self.retainvar_var_list.currentItem()
+        if not current_item:
+            self.retainvar_var_status.setText("Please select a variable")
+            return
+
+        value_text = self.retainvar_value_input.text().strip()
+        if not value_text:
+            self.retainvar_var_status.setText("Please enter a value")
+            return
+
+        try:
+            var_text = current_item.text()
+            var_index = int(var_text.split(':')[0].strip())
+            value = int(value_text)
+
+            if self.retainvar_monitor.write_variable(var_index, value):
+                self.retainvar_var_status.setText(f"Successfully wrote {value} to variable {var_index}")
+            else:
+                self.retainvar_var_status.setText(f"Failed to write variable {var_index}")
+
+        except ValueError:
+            self.retainvar_var_status.setText("Invalid value format")
+        except Exception as e:
+            self.retainvar_var_status.setText(f"Write error: {e}")
+
+    def retainvar_browse_hex(self):
+        """Browse for HEX firmware file"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Select HEX File", "", "HEX files (*.hex);;All files (*.*)"
+        )
+        if file_path:
+            self.retainvar_hex_path.setText(file_path)
+
+    def retainvar_program_firmware(self):
+        """Program firmware to device"""
+        if not self.retainvar_monitor:
+            return
+
+        hex_path = self.retainvar_hex_path.text().strip()
+        if not hex_path:
+            self.retainvar_fw_status.setText("Please select a HEX file")
+            return
+
+        if not os.path.exists(hex_path):
+            self.retainvar_fw_status.setText("HEX file not found")
+            return
+
+        # Disable button during programming
+        self.retainvar_program_btn.setEnabled(False)
+        self.retainvar_fw_status.setText("Programming...")
+
+        # Start programming in background thread
+        programming_thread = threading.Thread(target=self.retainvar_program_firmware_thread, args=(hex_path,), daemon=True)
+        programming_thread.start()
+
+    def retainvar_program_firmware_thread(self, hex_path):
+        """Firmware programming thread"""
+        try:
+            success = self.retainvar_monitor.program_firmware(hex_path)
+
+            if success:
+                QMetaObject.invokeMethod(self, "retainvar_update_fw_status",
+                                       Qt.QueuedConnection,
+                                       Q_ARG(str, "Firmware programming completed successfully"),
+                                       Q_ARG(str, "#4caf50"))
+            else:
+                QMetaObject.invokeMethod(self, "retainvar_update_fw_status",
+                                       Qt.QueuedConnection,
+                                       Q_ARG(str, "Firmware programming failed"),
+                                       Q_ARG(str, "#d32f2f"))
+
+        except Exception as e:
+            QMetaObject.invokeMethod(self, "retainvar_update_fw_status",
+                                   Qt.QueuedConnection,
+                                   Q_ARG(str, f"Programming error: {e}"),
+                                   Q_ARG(str, "#d32f2f"))
+        finally:
+            QMetaObject.invokeMethod(self, "retainvar_enable_program_btn", Qt.QueuedConnection)
+
+    @pyqtSlot(str, str)
+    def retainvar_update_fw_status(self, message, color):
+        """Update firmware programming status"""
+        self.retainvar_fw_status.setText(message)
+        self.retainvar_fw_status.setStyleSheet(f"color:{color};")
+
+    @pyqtSlot()
+    def retainvar_enable_program_btn(self):
+        """Re-enable program button"""
+        self.retainvar_program_btn.setEnabled(True)
 
     def closeEvent(self, event):
         if self.bus1_connected:
