@@ -1,9 +1,13 @@
-# CAN Communication Library Requirements
+# VCU CAN Tool Requirements
 # Install with: pip install -r requirements.txt
 
+# Core CAN communication
 python-can>=4.0.0
+cantools>=37.0.0
 typing-extensions>=4.0.0
 
-# GUI Requirements (tkinter is usually built-in with Python)
+# GUI
+PyQt5>=5.15.0
+
+# tkinter is usually built-in with Python
 # If tkinter is not available, install with: apt-get install python3-tk (Linux)
-# or ensure you're using a Python version with tkinter included
