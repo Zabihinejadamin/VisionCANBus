@@ -227,14 +227,14 @@ class CANMonitor(QMainWindow):
         layout.addWidget(self.tabs)
 
         # === Existing Emulators (unchanged) ===
-        self.create_emulator_tab(0x727, "0x727 – VCU→PCU", "VCU to PCU Command", "44 40 00 14 F8 11 64 00",
+        self.create_emulator_tab(0x727, "PCU CMD", "VCU to PCU Command", "44 40 00 14 F8 11 64 00",
                                  [("Standby","00 00 00 00 00 00 00 00"), ("Drive","01 00 00 00 00 00 00 00"), ("Reset","03 00 00 00 00 00 00 00")])
-        self.create_emulator_tab(0x587, "0x587 – PDU Cmd", "PDU Command", "01 01 00 00 01 00 07 04",
+        self.create_emulator_tab(0x587, "PDU Cmd", "PDU Command", "01 01 00 00 01 00 07 04",
                                  [("All OFF","00 00 00 00 00 00 00 00"), ("Precharge","01 00 00 00 00 00 00 00"), ("Main+Pre","03 00 00 00 00 00 00 00")])
-        self.create_emulator_tab(0x107, "0x107 – Pump", "Pump Command", "00 00 00 00 00 00 00 00",
+        self.create_emulator_tab(0x107, "ZCU Cmd", "ZCU Command", "00 00 00 00 00 00 00 00",
                                  [("OFF","00 00 00 00 00 00 00 00"), ("50%","01 32 00 00 00 00 00 00"), ("100%","01 64 00 00 00 00 00 00")])
-        self.create_emulator_tab(0x607, "0x607 – CCU/ZCU Cmd", "CCU/ZCU Command", "01 00 00 00 00 00 00 00")
-        self.create_emulator_tab(0x4F0, "0x4F0 – VCU→BMS", "VCU to BMS", "00 01 00 01 00 00 00 00",
+        self.create_emulator_tab(0x607, "CCU Cmd", "CCU Command", "01 00 00 00 00 00 00 00")
+        self.create_emulator_tab(0x4F0, "BMS Cmd", "VCU to BMS", "00 01 00 01 00 00 00 00",
                                  [("Idle","00 00 00 00 00 00 00 00"), ("Precharge","02 00 00 00 00 00 00 00"), ("Close","01 00 00 00 00 00 00 00")])
         
         self.create_emulator_tab(
