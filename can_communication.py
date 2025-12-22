@@ -976,6 +976,7 @@ class RetainVarMonitor:
         self.can_comm = CANCommunication(can_channel, baudrate)
         self.bootloader = BootloaderProtocol(self.can_comm)
         self.current_board = None
+        self.authenticated = False  # Track authentication status
 
     def connect(self) -> CANResult:
         """
@@ -1007,6 +1008,7 @@ class RetainVarMonitor:
         """
         try:
             self.current_board = BoardData(board_type)
+            self.authenticated = False  # Reset authentication when changing boards
             logger.info(f"Selected board type: {board_type}")
             return True
         except Exception as e:
@@ -1120,6 +1122,13 @@ class RetainVarMonitor:
             logger.error("No board selected")
             return False
 
+        # Authentication check: For variables other than keys (2, 3, 4), require authentication
+        if var_index not in [2, 3, 4]:  # Supervisor key, Admin key, User key
+            if not self.authenticated:
+                logger.error(f"Authentication required: Supervisor key must be set before writing variable {var_index}")
+                logger.error("Set variable 2 (Supervisor key) to a non-zero value first")
+                return False
+
         # Use board default if not explicitly provided
         if can_id_base is None:
             can_id_base = self.current_board.get_default_can_id_base()
@@ -1156,6 +1165,14 @@ class RetainVarMonitor:
             if result != CANResult.ERR_OK:
                 logger.debug(f"Failed to send write request for variable {var_index}: {result}")
                 return False
+
+            # Update authentication status if supervisor key was written
+            if var_index == 2:  # Supervisor key
+                self.authenticated = (value != 0)
+                if self.authenticated:
+                    logger.info("Supervisor authentication enabled")
+                else:
+                    logger.info("Supervisor authentication disabled")
 
             logger.debug(f"Successfully sent write request for variable {var_index} = {value}")
             return True
@@ -1221,6 +1238,15 @@ class RetainVarMonitor:
             return []
 
         return [(i, name) for i, name in enumerate(self.current_board.variable_names)]
+
+    def is_authenticated(self) -> bool:
+        """
+        Check if supervisor authentication is active
+
+        Returns:
+            bool: True if authenticated, False otherwise
+        """
+        return self.authenticated
 
 
 # Example usage and test functions

@@ -3443,6 +3443,28 @@ class CANMonitor(QMainWindow):
         launch_btn.clicked.connect(self.launch_original_gui)
         layout.addWidget(launch_btn)
 
+        # Authentication status
+        auth_label = QLabel("Authentication Status: Not Authenticated")
+        auth_label.setStyleSheet("color: #d32f2f; font-weight: bold;")
+        layout.addWidget(auth_label)
+
+        # Authentication instructions
+        auth_info = QLabel(
+            "🔐 <b>Authentication Required:</b><br>"
+            "Before modifying parameters, you must set the Supervisor Key.<br><br>"
+            "<b>To authenticate:</b><br>"
+            "1. Launch the RetainVar GUI<br>"
+            "2. Connect to CAN bus<br>"
+            "3. Select your board (VCU, PCU, etc.)<br>"
+            "4. Set variable 2 (Supervisor key) to a non-zero value<br>"
+            "5. Authentication will be enabled for parameter modifications<br><br>"
+            "<b>Note:</b> The original RetainVar system requires this authentication<br>"
+            "step before allowing any parameter changes."
+        )
+        auth_info.setWordWrap(True)
+        auth_info.setStyleSheet("background-color: #fff3cd; padding: 10px; border: 1px solid #ffeaa7;")
+        layout.addWidget(auth_info)
+
         # Info text
         info_text = QLabel(
             "This will launch the exact original RetainVar Monitor GUI from:\n"
@@ -3450,7 +3472,7 @@ class CANMonitor(QMainWindow):
             "The GUI includes:\n"
             "• CAN bus connection settings\n"
             "• Real-time CAN message monitoring\n"
-            "• Board selection and variable access\n"
+            "• Board selection and variable access (with authentication)\n"
             "• Firmware programming capabilities\n"
             "• Interactive command-line interface"
         )
