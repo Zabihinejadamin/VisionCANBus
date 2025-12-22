@@ -1,9 +1,0 @@
-# CAN Communication Library Requirements
-# Install with: pip install -r requirements.txt
-
-python-can>=4.0.0
-typing-extensions>=4.0.0
-
-# GUI Requirements (tkinter is usually built-in with Python)
-# If tkinter is not available, install with: apt-get install python3-tk (Linux)
-# or ensure you're using a Python version with tkinter included
