@@ -1338,6 +1338,7 @@ class CANMonitor(QMainWindow):
                 self.process_message_for_gui(msg, bus_num)
             except Exception as e:
                 # Suppress CAN send failure messages
+                pass
 
     # === Message Processing ===
     def process_message_for_gui(self, msg, can_bus=1):
@@ -2279,7 +2280,7 @@ class CANMonitor(QMainWindow):
                 print(f"Warning: No input field found for frame {frame_id} (attribute: {input_attr})")
 
         except Exception as e:
-            print(f"Error updating ZCU hex from table: {e}")
+            # Suppress ZCU hex update errors
             import traceback
             traceback.print_exc()
 
@@ -2351,7 +2352,7 @@ class CANMonitor(QMainWindow):
                 print(f"Warning: No input field found for frame {frame_id} (attribute: {input_attr})")
 
         except Exception as e:
-            print(f"Error updating HVC hex from table: {e}")
+            # Suppress HVC hex update errors
             import traceback
             traceback.print_exc()
 
@@ -2416,7 +2417,7 @@ class CANMonitor(QMainWindow):
                 print(f"Warning: No input field found for frame {frame_id} (attribute: {input_attr})")
 
         except Exception as e:
-            print(f"Error updating DC12 hex from table: {e}")
+            # Suppress DC12 hex update errors
             import traceback
             traceback.print_exc()
 
@@ -2534,7 +2535,7 @@ class CANMonitor(QMainWindow):
                 print(f"Warning: No input field found for TCU frame {frame_id:08X}")
 
         except Exception as e:
-            print(f"Error updating TCU hex from table: {e}")
+            # Suppress TCU hex update errors
             import traceback
             traceback.print_exc()
 
@@ -2653,7 +2654,7 @@ class CANMonitor(QMainWindow):
                 print(f"Warning: No hex label found for Drive frame {frame_id:08X}")
 
         except Exception as e:
-            print(f"Error updating Drive hex from table: {e}")
+            # Suppress Drive hex update errors
             import traceback
             traceback.print_exc()
 
@@ -2708,7 +2709,7 @@ class CANMonitor(QMainWindow):
                 print(f"Warning: No input field found for frame {frame_id} (attribute: {input_attr})")
 
         except Exception as e:
-            print(f"Error updating PDU hex from table: {e}")
+            # Suppress PDU hex update errors
             import traceback
             traceback.print_exc()
 
@@ -2924,7 +2925,7 @@ class CANMonitor(QMainWindow):
                         traceback.print_exc()
 
         except Exception as e:
-            print(f"Error updating PCU hex from table for frame {frame_id:03X}: {e}")
+            # Suppress PCU hex update errors
             import traceback
             traceback.print_exc()
 
