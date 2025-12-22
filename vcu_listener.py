@@ -11,7 +11,7 @@ import time
 
 # RetainVar integration - using original code exactly
 try:
-    from retainvar.can_communication import (
+    from can_communication import (
         RetainVarMonitor, CANResult, BaudRate,
         CANError, MessageType, CANMessage
     )
@@ -3466,19 +3466,19 @@ class CANMonitor(QMainWindow):
         import os
 
         try:
-            # Path to the original GUI script
-            gui_script = os.path.join(os.path.dirname(__file__), "retainvar", "gui_can_monitor.py")
+            # Path to the original GUI script (now in root directory)
+            gui_script = os.path.join(os.path.dirname(__file__), "gui_can_monitor.py")
 
             if not os.path.exists(gui_script):
                 QMessageBox.warning(self, "File Not Found",
                     f"Could not find the original GUI script at:\n{gui_script}\n\n"
-                    "Make sure the retainvar directory contains gui_can_monitor.py")
+                    "Make sure gui_can_monitor.py is in the root directory")
                 return
 
             # Launch the original tkinter GUI as a subprocess
             # This runs the exact same GUI with exact same functionality
             process = subprocess.Popen([sys.executable, gui_script],
-                                     cwd=os.path.dirname(gui_script))
+                                     cwd=os.path.dirname(__file__))
 
             QMessageBox.information(self, "RetainVar Monitor Launched",
                 "The original RetainVar Monitor GUI has been launched in a separate window.\n\n"
@@ -3659,7 +3659,7 @@ class CANMonitor(QMainWindow):
     def retainvar_check_interfaces(self):
         """Check available CAN interfaces"""
         try:
-            from retainvar.can_communication import CANCommunication
+            from can_communication import CANCommunication
             interfaces = CANCommunication.list_available_interfaces()
             msg = f"Available interfaces: {', '.join(interfaces)}"
             QMessageBox.information(self, "CAN Interfaces", msg)
