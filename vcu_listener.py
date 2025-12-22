@@ -3425,107 +3425,74 @@ class CANMonitor(QMainWindow):
         self.tabs.addTab(main_widget, "RetainVar")
 
     def setup_retainvar_interface(self, layout):
-        """Setup simple interface using original retainvar functions"""
-        # Initialize monitor
-        self.retainvar_monitor = None
+        """Launch the exact original tkinter GUI"""
+        import subprocess
+        import sys
+        import os
 
-        # Simple text output for results
-        self.retainvar_output = QTextEdit()
-        self.retainvar_output.setReadOnly(True)
-        self.retainvar_output.setMaximumHeight(300)
-        layout.addWidget(QLabel("RetainVar Output:"))
-        layout.addWidget(self.retainvar_output)
+        # Check if tkinter is available
+        try:
+            import tkinter
+        except ImportError:
+            layout.addWidget(QLabel("Tkinter not available. Please install tkinter for the RetainVar GUI."))
+            return
 
-        # Simple buttons for basic operations
-        button_layout = QHBoxLayout()
+        # Launch button for original GUI
+        launch_btn = QPushButton("Launch RetainVar Monitor (Original GUI)")
+        launch_btn.setStyleSheet("font-size: 14px; font-weight: bold; padding: 10px;")
+        launch_btn.clicked.connect(self.launch_original_gui)
+        layout.addWidget(launch_btn)
 
-        connect_btn = QPushButton("Connect CAN")
-        connect_btn.clicked.connect(self.retainvar_simple_connect)
-        button_layout.addWidget(connect_btn)
-
-        board_btn = QPushButton("Select VCU Board")
-        board_btn.clicked.connect(self.retainvar_simple_select_board)
-        button_layout.addWidget(board_btn)
-
-        read_btn = QPushButton("Read Variable 0")
-        read_btn.clicked.connect(self.retainvar_simple_read_var)
-        button_layout.addWidget(read_btn)
-
-        clear_btn = QPushButton("Clear Output")
-        clear_btn.clicked.connect(self.retainvar_clear_output)
-        button_layout.addWidget(clear_btn)
-
-        button_layout.addStretch()
-        layout.addLayout(button_layout)
-
-        # Status
-        self.retainvar_simple_status = QLabel("Ready")
-        layout.addWidget(self.retainvar_simple_status)
+        # Info text
+        info_text = QLabel(
+            "This will launch the exact original RetainVar Monitor GUI from:\n"
+            "https://github.com/Zabihinejadamin/retainvar_python\n\n"
+            "The GUI includes:\n"
+            "• CAN bus connection settings\n"
+            "• Real-time CAN message monitoring\n"
+            "• Board selection and variable access\n"
+            "• Firmware programming capabilities\n"
+            "• Interactive command-line interface"
+        )
+        info_text.setWordWrap(True)
+        layout.addWidget(info_text)
 
         layout.addStretch()
 
-    def retainvar_simple_connect(self):
-        """Simple CAN connection using original code"""
-        try:
-            # Use exact same initialization as original
-            CAN_CHANNEL = 'PCAN_USBBUS1'  # Default
-            CAN_BAUDRATE = BaudRate.BAUD_250K
-
-            self.retainvar_monitor = RetainVarMonitor(CAN_CHANNEL, CAN_BAUDRATE)
-            result = self.retainvar_monitor.connect()
-
-            if result == CANResult.ERR_OK:
-                self.retainvar_output.append("Connected to CAN bus successfully")
-                self.retainvar_simple_status.setText("Connected")
-                self.retainvar_simple_status.setStyleSheet("color:#4caf50;")
-            else:
-                self.retainvar_output.append(f"Failed to connect: {result}")
-                self.retainvar_simple_status.setText("Connection failed")
-                self.retainvar_simple_status.setStyleSheet("color:#d32f2f;")
-
-        except Exception as e:
-            self.retainvar_output.append(f"Connection error: {e}")
-            self.retainvar_simple_status.setText("Error")
-            self.retainvar_simple_status.setStyleSheet("color:#d32f2f;")
-
-    def retainvar_simple_select_board(self):
-        """Simple board selection using original code"""
-        if not self.retainvar_monitor:
-            self.retainvar_output.append("Not connected to CAN bus")
-            return
+    def launch_original_gui(self):
+        """Launch the original tkinter GUI exactly as-is"""
+        import subprocess
+        import sys
+        import os
 
         try:
-            board_type = 'VCU'  # Default to VCU
+            # Path to the original GUI script
+            gui_script = os.path.join(os.path.dirname(__file__), "retainvar", "gui_can_monitor.py")
 
-            if self.retainvar_monitor.select_board(board_type):
-                self.retainvar_output.append(f"Selected {board_type} board successfully")
-                self.retainvar_simple_status.setText(f"Board: {board_type}")
-            else:
-                self.retainvar_output.append(f"Failed to select {board_type} board")
+            if not os.path.exists(gui_script):
+                QMessageBox.warning(self, "File Not Found",
+                    f"Could not find the original GUI script at:\n{gui_script}\n\n"
+                    "Make sure the retainvar directory contains gui_can_monitor.py")
+                return
 
-        except Exception as e:
-            self.retainvar_output.append(f"Board selection error: {e}")
+            # Launch the original tkinter GUI as a subprocess
+            # This runs the exact same GUI with exact same functionality
+            process = subprocess.Popen([sys.executable, gui_script],
+                                     cwd=os.path.dirname(gui_script))
 
-    def retainvar_simple_read_var(self):
-        """Simple variable reading using original code"""
-        if not self.retainvar_monitor or not self.retainvar_monitor.current_board:
-            self.retainvar_output.append("No board selected")
-            return
-
-        try:
-            # Use exact same read operation as original
-            success, value = self.retainvar_monitor.read_variable(0)
-            if success:
-                self.retainvar_output.append(f"Variable 0: 0x{value:04X} ({value})")
-            else:
-                self.retainvar_output.append("Failed to read variable")
+            QMessageBox.information(self, "RetainVar Monitor Launched",
+                "The original RetainVar Monitor GUI has been launched in a separate window.\n\n"
+                "You can now use all the original features:\n"
+                "• Connect to CAN bus\n"
+                "• Monitor CAN messages\n"
+                "• Select boards and read/write variables\n"
+                "• Program firmware\n"
+                "• Use the interactive command interface")
 
         except Exception as e:
-            self.retainvar_output.append(f"Read error: {e}")
+            QMessageBox.critical(self, "Launch Failed",
+                f"Failed to launch the original RetainVar GUI:\n{str(e)}")
 
-    def retainvar_clear_output(self):
-        """Clear the output text"""
-        self.retainvar_output.clear()
 
     def create_retainvar_canbus_tab(self):
         """Create CAN Bus Monitor tab"""
