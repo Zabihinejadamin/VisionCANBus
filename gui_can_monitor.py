@@ -395,12 +395,12 @@ Converted from original C++ Borland Builder application."""
                     self.root.after(0, self.add_message_to_list, message, timestamp)
                 elif result != CANResult.ERR_QRCVEMPTY:
                     # Log any errors except "no message received"
-                    print(f"CAN receive error: {result}")
+                    # Suppress CAN receive error
                     self.safe_status_update(f"Receive error: {result}")
                     time.sleep(0.5)
 
             except Exception as e:
-                print(f"Error monitoring CAN: {e}")
+                # Suppress CAN monitoring error
                 self.safe_status_update(f"CAN Error: {e}")
                 time.sleep(1)
 
@@ -616,12 +616,14 @@ Converted from original C++ Borland Builder application."""
             success, value = self.monitor.read_variable(idx, None, 0)  # Use board default for CAN ID base, keep board index 0
             if success:
                 self.variable_values[idx]["value"] = self.format_value_hex(value, idx)
-                print(f"DEBUG: Successfully read variable {idx} = {value}")
+                # Suppress debug message
             else:
                 # Don't overwrite existing values with "No Response" to prevent shifting
-                print(f"DEBUG: No response for variable {idx}")
+                # Suppress debug message
+                pass
         except Exception as e:
-            print(f"DEBUG: Exception reading variable {idx}: {e}")
+            # Suppress debug message
+            pass
 
         # Move to next variable
         self.current_read_index += 1
@@ -790,17 +792,14 @@ class CANMonitorApp:
 
     def run(self):
         """Run the application"""
-        print("Starting CAN Monitor GUI...")
+        # Suppress startup messages
         # Create settings window first
         settings_root = tk.Tk()
         settings_window = CANSettingsWindow(settings_root, self.on_connect)
-        print("Settings window created, starting mainloop...")
         settings_root.mainloop()
-        print("Settings window closed")
 
         # If connection successful, show main window
         if hasattr(self, 'monitor') and self.monitor:
-            print("Starting main monitoring window...")
             # Create main monitoring window after settings window closes
             self.root = tk.Tk()
             self.monitor_window = CANMonitorWindow(self.root, self.monitor)
@@ -809,7 +808,8 @@ class CANMonitorApp:
             # Variable reading is started by select_board when board is selected
             self.root.mainloop()
         else:
-            print("No monitor created, exiting")
+            # Suppress exit message
+            pass
 
     def on_connect(self, interface, baud_rate):
         """Handle successful CAN connection"""
@@ -837,7 +837,8 @@ def main():
         app = CANMonitorApp()
         app.run()
     except KeyboardInterrupt:
-        print("Application interrupted by user")
+        # Suppress interrupt message
+        pass
     except Exception as e:
         print(f"Application error: {e}")
         messagebox.showerror("Application Error", f"Unexpected error: {e}")
