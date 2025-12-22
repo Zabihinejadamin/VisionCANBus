@@ -227,6 +227,91 @@ class CANMonitorWindow:
             self.update_status_display()
             self.root.after(1000, self.status_update_timer)  # Update every second
 
+    def on_tree_double_click(self, event):
+        """Handle double-click on treeview to edit values"""
+        # Get the region that was clicked
+        region = self.var_tree.identify_region(event.x, event.y)
+        if region != "cell":
+            return
+
+        # Get the column and item that was clicked
+        column = self.var_tree.identify_column(event.x)
+        item = self.var_tree.identify_row(event.y)
+
+        if not item or column != "#3":  # Only allow editing the Value column
+            return
+
+        # Get the current value
+        values = self.var_tree.item(item, "values")
+        if not values or len(values) < 3:
+            return
+
+        var_index = int(values[0])
+        current_value = str(values[2])
+
+        # Get the bounding box of the cell
+        x, y, width, height = self.var_tree.bbox(item, column)
+
+        # Create an entry widget over the cell
+        self.edit_entry = tk.Entry(self.var_tree, width=15)
+        self.edit_entry.place(x=x, y=y, width=width, height=height)
+        self.edit_entry.insert(0, current_value)
+        self.edit_entry.focus()
+        self.edit_entry.select_range(0, tk.END)
+
+        # Store the item and column being edited
+        self.editing_item = item
+        self.editing_column = column
+        self.editing_var_index = var_index
+
+        # Bind events
+        self.edit_entry.bind("<Return>", self.save_edit)
+        self.edit_entry.bind("<Escape>", self.cancel_edit)
+        self.edit_entry.bind("<FocusOut>", self.save_edit)
+
+    def save_edit(self, event=None):
+        """Save the edited value"""
+        if not hasattr(self, 'edit_entry'):
+            return
+
+        try:
+            new_value_str = self.edit_entry.get()
+            new_value = int(new_value_str, 16) if new_value_str.startswith('0x') else int(new_value_str)
+
+            # Write the value to the board
+            board_index_str = self.board_index_var.get()
+            try:
+                board_index = int(board_index_str)
+            except ValueError:
+                board_index = 0
+
+            success = self.monitor.write_variable(self.editing_var_index, new_value, None, board_index)
+
+            if success:
+                # Update the display
+                self.variable_values[self.editing_var_index]["value"] = self.format_value_hex(new_value, self.editing_var_index)
+                self.update_variable_display()
+                self.safe_status_update(f"Edited variable {self.editing_var_index}: {new_value}")
+            else:
+                messagebox.showerror("Error", f"Failed to write variable {self.editing_var_index}")
+                # Revert to original value by refreshing
+                self.update_variable_display()
+
+        except ValueError:
+            messagebox.showerror("Error", "Invalid value format")
+            self.update_variable_display()
+        except Exception as e:
+            messagebox.showerror("Error", f"Edit error: {e}")
+            self.update_variable_display()
+        finally:
+            self.cancel_edit()
+
+    def cancel_edit(self, event=None):
+        """Cancel the current edit"""
+        if hasattr(self, 'edit_entry'):
+            self.edit_entry.destroy()
+            delattr(self, 'edit_entry')
+
     def safe_status_update(self, message):
         """Safely update status from any thread"""
         try:
@@ -346,6 +431,9 @@ class CANMonitorWindow:
 
         self.var_tree.pack(side="left", fill="both", expand=True)
         var_scrollbar.pack(side="right", fill="y")
+
+        # Bind double-click event for editing values
+        self.var_tree.bind("<Double-1>", self.on_tree_double_click)
 
         # Initialize with PCU board
         self.select_board()
