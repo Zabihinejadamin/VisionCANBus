@@ -1337,7 +1337,7 @@ class CANMonitor(QMainWindow):
                 bus.send(msg)
                 self.process_message_for_gui(msg, bus_num)
             except Exception as e:
-                print(f"Send failed on CAN{bus_num}:", e)
+                # Suppress CAN send failure messages
 
     # === Message Processing ===
     def process_message_for_gui(self, msg, can_bus=1):
@@ -1449,10 +1449,10 @@ class CANMonitor(QMainWindow):
                         with self.lock:
                             self.error_count += 1
                     else:
-                        print(f"CAN2 received: 0x{msg.arbitration_id:03X}")  # Debug print
+                        # Suppress CAN2 receive debug prints
                         self.process_message_for_gui(msg, can_bus=2)
             except Exception as e:
-                print(f"CAN2 listener error: {e}")
+                # Suppress CAN2 listener errors
                 pass
 
     def update_gui(self):
@@ -1857,7 +1857,7 @@ class CANMonitor(QMainWindow):
             frame_name = "HVC Stat"
         else:
             frame_name = "DC12 Stat"
-        print(f"{frame_name} value changed: {signal_name} = {new_value}")
+        # Suppress frame value change messages
 
         # Store the modified value
         if frame_id not in self.modified_signals:
@@ -1946,7 +1946,7 @@ class CANMonitor(QMainWindow):
             ID_DRIVE_FRAME: "Drive Frame"
         }
         frame_name = frame_names.get(frame_id, "TCU")
-        print(f"{frame_name} value changed: {signal_name} = {new_value}")
+        # Suppress frame value change messages
 
         # Store the modified value
         if frame_id not in self.modified_signals:
@@ -2022,7 +2022,7 @@ class CANMonitor(QMainWindow):
         frame_id, signal_name = data
         new_value = item.text()
 
-        print(f"Battery 1 value changed: Frame {frame_id:03X}, Signal {signal_name} = {new_value}")
+        # Suppress battery value change messages
 
         # Store the modified value
         if frame_id not in self.modified_signals:
@@ -2115,14 +2115,15 @@ class CANMonitor(QMainWindow):
             if hasattr(self, 'bat_inputs') and frame_id in self.bat_inputs:
                 input_field = self.bat_inputs[frame_id]
                 input_field.setText(hex_string)
-                print(f"Updated Battery 1 hex payload: {hex_string}")
+                # Suppress success message
             else:
-                print(f"Warning: No input field found for frame {frame_id} (attribute: {input_attr})")
+                # Suppress warning message for missing input fields
+                pass
 
         except Exception as e:
-            print(f"Error updating Battery 1 hex from table: {e}")
-            import traceback
-            traceback.print_exc()
+            # Suppress encoding errors when required signals are missing
+            # This is normal when not all signals have been populated
+            pass
 
     def update_ccu_hex_from_table(self, frame_id):
         """Update hex payload for CCU stat when table values change"""
@@ -2197,12 +2198,14 @@ class CANMonitor(QMainWindow):
             if hasattr(self, input_attr):
                 input_field = getattr(self, input_attr)
                 input_field.setText(hex_string)
-                print(f"Updated CCU hex payload: {hex_string}")
+                # Suppress CCU hex payload update messages
             else:
-                print(f"Warning: No input field found for frame {frame_id} (attribute: {input_attr})")
+                # Suppress warning for missing input fields
+                pass
 
         except Exception as e:
-            print(f"Error updating CCU hex from table: {e}")
+            # Suppress CCU hex update errors
+            pass
             import traceback
             traceback.print_exc()
 
